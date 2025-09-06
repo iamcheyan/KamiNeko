@@ -46,14 +46,21 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // If this is the first window (no documents yet), restore session; otherwise create a fresh empty doc
+            // For new tabs/windows, always create a fresh empty document
+            // Only restore session on the very first app launch when no stores exist
             if store.documents.isEmpty {
-                let restored = SessionManager.shared.restoreSession()
-                if restored.isEmpty {
-                    store.newUntitled()
+                let shouldRestoreSession = DocumentStore.allStores.allObjects.count <= 1
+                if shouldRestoreSession {
+                    let restored = SessionManager.shared.restoreSession()
+                    if restored.isEmpty {
+                        store.newUntitled()
+                    } else {
+                        store.documents = restored
+                        store.selectedDocumentID = restored.first?.id
+                    }
                 } else {
-                    store.documents = restored
-                    store.selectedDocumentID = restored.first?.id
+                    // This is a new tab/window, create empty document
+                    store.newUntitled()
                 }
             } else if store.selectedDocument() == nil {
                 store.newUntitled()

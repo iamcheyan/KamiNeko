@@ -53,9 +53,22 @@ final class DocumentStore: ObservableObject {
     @Published var documents: [DocumentModel] = []
     @Published var selectedDocumentID: UUID? = nil
 
+    // Weak registry of all stores for session aggregation across tabs/windows
+    static let allStores: NSHashTable<DocumentStore> = NSHashTable<DocumentStore>.weakObjects()
+
+    init() {
+        DocumentStore.allStores.add(self)
+    }
+
+    deinit {
+        DocumentStore.allStores.remove(self)
+    }
+
     func newUntitled() {
-        let untitledIndex = (documents.filter { $0.isUntitled }.count) + 1
-        let doc = DocumentModel(title: "Untitled \(untitledIndex)")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let timestamp = formatter.string(from: Date())
+        let doc = DocumentModel(title: timestamp, content: "")
         documents.append(doc)
         selectedDocumentID = doc.id
     }

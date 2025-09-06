@@ -18,11 +18,11 @@ enum SyntaxHighlighter {
         "let","var","func","if","else","for","while","repeat","switch","case","default","break","continue","return","import","in","where","guard","do","catch","try","as","is","class","struct","enum","protocol","extension","init","deinit","public","private","fileprivate","internal","open","static","throws","rethrows","async","await","nil","true","false"
     ]
 
-    static func highlight(storage: NSTextStorage, in range: NSRange) {
+    static func highlight(storage: NSTextStorage, in range: NSRange, defaultColor: NSColor) {
         guard range.location != NSNotFound, range.length > 0 else { return }
 
-        // Reset attributes to default foreground color to avoid color accumulation
-        storage.removeAttribute(.foregroundColor, range: range)
+        // Set default foreground color first (dynamic color adapts to appearance)
+        storage.addAttribute(.foregroundColor, value: defaultColor, range: range)
 
         let string = storage.string as NSString
 

@@ -103,7 +103,7 @@ struct EditorTextView: NSViewRepresentable {
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
             guard editedMask.contains(.editedCharacters) || editedMask.contains(.editedAttributes) else { return }
             let fullRange = NSRange(location: 0, length: textStorage.length)
-            SyntaxHighlighter.highlight(storage: textStorage, in: fullRange)
+            SyntaxHighlighter.highlight(storage: textStorage, in: fullRange, defaultColor: NSColor.labelColor)
         }
     }
 }

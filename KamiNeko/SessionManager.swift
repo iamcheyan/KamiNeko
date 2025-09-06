@@ -49,6 +49,13 @@ final class SessionManager {
         }
     }
 
+    // Aggregate save across all open stores (multiple windows/tabs)
+    func saveAllStores() {
+        for case let store as DocumentStore in DocumentStore.allStores.allObjects {
+            saveSession(store: store)
+        }
+    }
+
     func restoreSession() -> [DocumentModel] {
         prepareDirectories()
         guard let data = try? Data(contentsOf: sessionFileURL) else { return [] }
@@ -73,9 +80,9 @@ final class SessionManager {
 
     func startAutoSave(store: DocumentStore) {
         stopAutoSave()
-        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self, weak store] _ in
-            guard let self = self, let store = store else { return }
-            self.saveSession(store: store)
+        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.saveAllStores()
         }
         RunLoop.main.add(autosaveTimer!, forMode: .common)
     }

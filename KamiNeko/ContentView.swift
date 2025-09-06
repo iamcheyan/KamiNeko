@@ -54,6 +54,7 @@ struct ContentView: View {
                 store.selectedDocumentID = restored.first?.id
             }
             SessionManager.shared.startAutoSave(store: store)
+            updateWindowTitle()
         }
         .onDisappear { SessionManager.shared.stopAutoSave() }
         .toolbar {
@@ -69,6 +70,7 @@ struct ContentView: View {
         .preferredColorScheme(preferredScheme)
         .onAppear { applyWindowAppearance() }
         .onChange(of: preferredSchemeRaw) { _ in applyWindowAppearance() }
+        .onChange(of: store.selectedDocumentID) { _ in updateWindowTitle() }
     }
 
     private func openFile() {
@@ -78,6 +80,7 @@ struct ContentView: View {
         panel.allowedContentTypes = [.item]
         if panel.runModal() == .OK, let url = panel.url {
             store.open(url: url)
+            updateWindowTitle()
         }
     }
 
@@ -118,6 +121,11 @@ struct ContentView: View {
         for window in NSApp.windows {
             window.appearance = name.flatMap { NSAppearance(named: $0) }
         }
+    }
+
+    private func updateWindowTitle() {
+        guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
+        window.title = doc.title
     }
 }
 

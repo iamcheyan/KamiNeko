@@ -119,6 +119,22 @@ struct EditorTextView: NSViewRepresentable {
 }
 
 final class ZoomableTextView: NSTextView {
+    private let currentLineLayer = CALayer()
+
+    private func currentFontLineHeight() -> CGFloat {
+        let f = self.font ?? NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        return f.ascender - f.descender + f.leading
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        wantsLayer = true
+        currentLineLayer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.10).cgColor
+        currentLineLayer.cornerRadius = 3
+        layer?.addSublayer(currentLineLayer)
+        updateCurrentLineHighlight()
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override func scrollWheel(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -138,6 +154,40 @@ final class ZoomableTextView: NSTextView {
             }
         }
         super.scrollWheel(with: event)
+        // 滚动后更新高亮位置
+        updateCurrentLineHighlight()
+    }
+
+    override func setSelectedRange(_ charRange: NSRange) {
+        super.setSelectedRange(charRange)
+        updateCurrentLineHighlight()
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        updateCurrentLineHighlight()
+    }
+
+    override func layout() {
+        super.layout()
+        updateCurrentLineHighlight()
+    }
+
+    private func updateCurrentLineHighlight() {
+        guard let lm = layoutManager, textContainer != nil else { return }
+        guard let range = selectedRanges.first as? NSRange else { return }
+        let safeLocation = min(range.location, (string as NSString).length > 0 ? (string as NSString).length - 1 : 0)
+        let glyphIndex = lm.glyphIndexForCharacter(at: safeLocation)
+        var lineRange = NSRange(location: 0, length: 0)
+        let lineRect = lm.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &lineRange, withoutAdditionalLayout: true)
+        let origin = textContainerOrigin
+        var frame = CGRect(x: 0, y: lineRect.minY + origin.y, width: bounds.width, height: lineRect.height)
+        // 避免在无文本时无限大
+        if frame.height.isFinite == false || frame.height <= 0 { frame.size.height = currentFontLineHeight() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        currentLineLayer.frame = frame
+        CATransaction.commit()
     }
 }
 

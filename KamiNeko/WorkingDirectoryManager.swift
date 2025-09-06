@@ -115,6 +115,32 @@ final class WorkingDirectoryManager {
         return try work()
     }
 
+    func isWhitespaceOnly(_ url: URL) -> Bool {
+        return withDirectoryAccess {
+            // 先用文件大小快速判断
+            if let attrs = try? fileManager.attributesOfItem(atPath: url.path), let size = attrs[.size] as? NSNumber {
+                if size.intValue == 0 { return true }
+            }
+            // 再尝试按 UTF-8 解码，无法解码则视为非空（避免误删二进制或非 UTF-8 文本）
+            if let data = try? Data(contentsOf: url) {
+                if let str = String(data: data, encoding: .utf8) {
+                    return str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                } else {
+                    return false
+                }
+            }
+            return false
+        }
+    }
+
+    func deleteFile(at url: URL) throws {
+        try withDirectoryAccess {
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
+        }
+    }
+
     private func timestampString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"

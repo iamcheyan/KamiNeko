@@ -49,8 +49,8 @@ struct ContentView: View {
                         var files = WorkingDirectoryManager.shared.listFiles()
                         // 启动时先清理空白文件（仅空白字符），并从加载列表中过滤掉
                         files = files.filter { url in
-                            if let content = try? String(contentsOf: url), content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                try? FileManager.default.removeItem(at: url)
+                            if WorkingDirectoryManager.shared.isWhitespaceOnly(url) {
+                                try? WorkingDirectoryManager.shared.deleteFile(at: url)
                                 return false
                             }
                             return true
@@ -162,10 +162,10 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentTitleChanged)) { _ in syncRenameIfNeeded() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
-            // 仅删除与当前窗口对应的文件
+            // 仅删除与当前窗口对应的空白文件
             if SessionManager.shared.isTerminating { return }
-            if let url = store.selectedDocument()?.fileURL {
-                try? FileManager.default.removeItem(at: url)
+            if let url = store.selectedDocument()?.fileURL, WorkingDirectoryManager.shared.isWhitespaceOnly(url) {
+                try? WorkingDirectoryManager.shared.deleteFile(at: url)
             }
         })
         return view
@@ -355,7 +355,9 @@ struct ContentView: View {
 
     private func makeDoc(for url: URL) -> DocumentModel {
         let title = url.deletingPathExtension().lastPathComponent
-        let content = (try? String(contentsOf: url)) ?? ""
+        let content: String = WorkingDirectoryManager.shared.withDirectoryAccess {
+            (try? String(contentsOf: url)) ?? ""
+        }
         return DocumentModel(title: title, content: content, fileURL: url, isDirty: false)
     }
 }

@@ -27,6 +27,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     private var titleLabel: NSTextField?
     private var titleEditField: NSTextField?
     private var zoomSlider: NSSlider?
+    private var lastKnownTitle: String = "Untitled"
     private func currentThemeSymbolName() -> String {
         // 浅色显示太阳，深色显示月亮
         let scheme = UserDefaults.standard.string(forKey: "preferredColorScheme") ?? "system"
@@ -55,6 +56,8 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         }
 
         NotificationCenter.default.addObserver(self, selector: #selector(updateTitle(_:)), name: .documentTitleChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(windowBecameKey(_:)), name: NSWindow.didBecomeKeyNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(appBecameActive), name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
     // MARK: - Toolbar delegate
@@ -172,13 +175,31 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
 
     // MARK: - Title updates
     @objc private func updateTitle(_ note: Notification) {
-        // 始终与窗口标题同步（窗口标题已设置为完整路径或文档标题）
-        titleLabel?.stringValue = currentTitle()
+        if let t = note.userInfo? ["title"] as? String, t.isEmpty == false {
+            lastKnownTitle = t
+        } else if let t = NSApp.keyWindow?.title, t.isEmpty == false {
+            lastKnownTitle = t
+        }
+        titleLabel?.stringValue = lastKnownTitle
+    }
+
+    @objc private func windowBecameKey(_ note: Notification) {
+        if let win = note.object as? NSWindow, let t = win.title as String? {
+            if t.isEmpty == false { lastKnownTitle = t }
+            titleLabel?.stringValue = lastKnownTitle
+        }
+    }
+
+    @objc private func appBecameActive() {
+        let t = NSApp.keyWindow?.title
+        if let t, t.isEmpty == false { lastKnownTitle = t }
+        titleLabel?.stringValue = lastKnownTitle
     }
 
     private func currentTitle() -> String {
         // 中心标题与标签标题一致：使用窗口标题（已由 ContentView 计算为每个文档的内容标题）
-        return (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")!
+        if let t = NSApp.keyWindow?.title, t.isEmpty == false { return t }
+        return lastKnownTitle
     }
 
     @objc private func fontSizeChanged(_ note: Notification) {

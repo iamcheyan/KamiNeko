@@ -211,6 +211,7 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             if let win = note.object as? NSWindow, win === owningWindow {
                 updateWindowTitle()
+                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": win.title])
             }
             updateTabCount()
         })

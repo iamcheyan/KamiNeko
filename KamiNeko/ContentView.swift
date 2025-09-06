@@ -25,6 +25,44 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Document tabs
+            if store.documents.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 0) {
+                        ForEach(store.documents) { doc in
+                            Button(action: {
+                                store.select(doc)
+                            }) {
+                                HStack {
+                                    Text(doc.title)
+                                        .lineLimit(1)
+                                        .font(.system(size: 12))
+                                    Button(action: {
+                                        store.close(doc)
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 8))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    doc.id == store.selectedDocumentID ? 
+                                    Color.accentColor.opacity(0.2) : 
+                                    Color.clear
+                                )
+                                .cornerRadius(4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                }
+                .frame(height: tabHeight)
+                .background(Color(NSColor.controlBackgroundColor))
+            }
+            
             // Editor area
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)
@@ -47,38 +85,32 @@ struct ContentView: View {
         }
         .onAppear {
             if store.documents.isEmpty {
-                // Check if this is app startup (first store) or a new tab
-                let allStores = DocumentStore.allStores.allObjects
-                let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { ($0 as? DocumentStore)?.documents.isEmpty ?? true }
+                // Check if this is app startup or a new tab
+                let allStores = DocumentStore.allStores.allObjects.compactMap { $0 as DocumentStore }
+                let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { $0.documents.isEmpty }
                 
                 if isAppStartup {
-                    // App startup: restore documents and fan out to multiple tabs
+                    // App startup: restore all documents in one tab
                     let restored = SessionManager.shared.restoreSession()
                     if restored.isEmpty {
                         store.newUntitled()
                     } else {
-                        // Assign the first document to this store
-                        let firstDoc = restored.first!
-                        store.documents = [firstDoc]
-                        store.selectedDocumentID = firstDoc.id
-                        
-                        // For remaining documents, create additional tabs; each new tab
-                        // will pick up one unassigned restored document on its own appear
-                        if restored.count > 1 {
-                            for _ in 1..<restored.count {
-                                newTab()
-                            }
-                        }
+                        // Restore all documents to this store
+                        store.documents = restored
+                        store.selectedDocumentID = restored.first?.id
                     }
                 } else {
-                    // New tab: try to take one of the restored documents not yet assigned
+                    // New tab: check if there's a document waiting to be assigned
                     let restored = SessionManager.shared.restoreSession()
-                    let assignedIDs = Set(DocumentStore.allStores.allObjects.flatMap { ($0 as? DocumentStore)?.documents.map { $0.id } ?? [] })
-                    if let docToAssign = restored.first(where: { !assignedIDs.contains($0.id) }) {
+                    let assignedCount = allStores.filter { !$0.documents.isEmpty }.count
+                    
+                    if assignedCount < restored.count {
+                        // There's still a document to assign to this tab
+                        let docToAssign = restored[assignedCount]
                         store.documents = [docToAssign]
                         store.selectedDocumentID = docToAssign.id
                     } else {
-                        // No pending restored docs, create an empty one
+                        // All restored documents are assigned, create new empty document
                         store.newUntitled()
                     }
                 }
@@ -91,8 +123,8 @@ struct ContentView: View {
         }
         .onDisappear { SessionManager.shared.stopAutoSave() }
         .preferredColorScheme(preferredScheme)
-        .onChange(of: preferredSchemeRaw) { _ in applyWindowAppearance() }
-        .onChange(of: store.selectedDocumentID) { _ in
+        .onChange(of: preferredSchemeRaw) { applyWindowAppearance() }
+        .onChange(of: store.selectedDocumentID) {
             updateWindowTitle()
             if let title = store.selectedDocument()?.title {
                 NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": title])
@@ -184,7 +216,11 @@ struct ContentView: View {
 
     private func performUndo() { NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil) }
     private func performRedo() { NSApp.sendAction(#selector(UndoManager.redo), to: nil, from: nil) }
-    private func newTab() { NSApp.keyWindow?.newWindowForTab(nil) }
+    private func newTab() { 
+        // Since we now manage multiple documents in one window,
+        // newTab just creates a new document in the current store
+        store.newUntitled()
+    }
     private func showAllTabs() {
         if let window = NSApp.keyWindow { _ = window.perform(NSSelectorFromString("toggleTabOverview:"), with: nil) }
     }

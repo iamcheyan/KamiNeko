@@ -45,7 +45,11 @@ struct EditorTextView: NSViewRepresentable {
 
         // Attach document view first
         let layoutManager = textView.layoutManager!
-        layoutManager.hyphenationFactor = 0.0
+        if #available(macOS 10.15, *) {
+            layoutManager.usesDefaultHyphenation = false
+        } else {
+            layoutManager.hyphenationFactor = 0.0
+        }
         scrollView.documentView = textView
 
         // Line number ruler after documentView is set

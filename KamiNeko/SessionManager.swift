@@ -49,29 +49,29 @@ final class SessionManager {
         }
     }
 
-    // Aggregate save across all open stores (multiple windows/tabs)
+    // Save all tabs (each tab should have one selected document)
     func saveAllStores() {
         prepareDirectories()
-        var allSessions: [DocumentSession] = []
+        var tabSessions: [DocumentSession] = []
         
-        // Collect all documents from all stores
-        for case let store as DocumentStore in DocumentStore.allStores.allObjects {
-            let sessions: [DocumentSession] = store.documents.map { doc in
-                let tempURL = tempContentURL(for: doc.id)
+        // Collect the selected document from each store (each tab)
+        for obj in DocumentStore.allStores.allObjects {
+            guard let store = obj as? DocumentStore else { continue }
+            if let selectedDoc = store.selectedDocument() {
+                let tempURL = tempContentURL(for: selectedDoc.id)
                 // Always write snapshot for recovery (both untitled and named)
-                if doc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
-                    try? doc.content.data(using: .utf8)?.write(to: tempURL)
-                    doc.isDirty = false
+                if selectedDoc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
+                    try? selectedDoc.content.data(using: .utf8)?.write(to: tempURL)
+                    selectedDoc.isDirty = false
                 }
-                return doc.toSession(tempContentPath: tempURL.path)
+                tabSessions.append(selectedDoc.toSession(tempContentPath: tempURL.path))
             }
-            allSessions.append(contentsOf: sessions)
         }
         
-        // Save all sessions to one file
+        // Save all tab sessions to one file
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        if let data = try? encoder.encode(allSessions) {
+        if let data = try? encoder.encode(tabSessions) {
             try? data.write(to: sessionFileURL)
         }
     }

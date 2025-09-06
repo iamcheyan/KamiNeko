@@ -29,9 +29,15 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     private var zoomSlider: NSSlider?
     private func currentThemeSymbolName() -> String {
         // 浅色显示太阳，深色显示月亮
-        switch NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) {
-        case .some(.darkAqua): return "moon"
-        default: return "sun.max"
+        let scheme = UserDefaults.standard.string(forKey: "preferredColorScheme") ?? "system"
+        switch scheme {
+        case "dark": return "moon"
+        case "light": return "sun.max"
+        default: // system
+            switch NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) {
+            case .some(.darkAqua): return "moon"
+            default: return "sun.max"
+            }
         }
     }
 
@@ -149,8 +155,11 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         NotificationCenter.default.post(name: .appAppearanceChanged, object: nil)
     }
     @objc private func appearanceChanged() {
-        if let item = (NSApp.keyWindow?.toolbar?.items.first { $0.itemIdentifier == themeId }), let button = item.view as? NSButton {
-            button.image = NSImage(systemSymbolName: currentThemeSymbolName(), accessibilityDescription: nil)
+        // 延迟一点更新，确保 UserDefaults 已经更新
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let item = (NSApp.keyWindow?.toolbar?.items.first { $0.itemIdentifier == self.themeId }), let button = item.view as? NSButton {
+                button.image = NSImage(systemSymbolName: self.currentThemeSymbolName(), accessibilityDescription: nil)
+            }
         }
     }
     @objc private func newTab() { NotificationCenter.default.post(name: .toolbarNewTab, object: nil) }

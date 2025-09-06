@@ -395,7 +395,7 @@ struct ContentView: View {
             for lineSub in lines.prefix(5) {
                 var s = String(lineSub)
                 s = s.replacingOccurrences(of: "//", with: "").trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                if s.hasSuffix(".swift") || s.hasSuffix(".txt") { return s }
+                if s.hasSuffix(".swift") || s.hasSuffix(".txt") || s.hasSuffix(".json") { return s }
             }
             if let nonComment = lines.drop(while: { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).hasPrefix("//") }).first {
                 return sanitizeLeadingPunctuation(String(nonComment))
@@ -499,11 +499,18 @@ struct ContentView: View {
     }
 
     private func makeDoc(for url: URL) -> DocumentModel {
+        // 尝试从JSON文件加载文档信息
+        if let document = WorkingDirectoryManager.shared.loadDocumentFromJSON(at: url) {
+            return document
+        }
+        
+        // 兜底：如果不是JSON文件或加载失败，按旧逻辑处理
         let title = url.deletingPathExtension().lastPathComponent
         let content: String = WorkingDirectoryManager.shared.withDirectoryAccess {
             (try? String(contentsOf: url)) ?? ""
         }
-        return DocumentModel(title: title, content: content, fileURL: url, isDirty: false)
+        let now = Date()
+        return DocumentModel(title: title, content: content, fileURL: url, isDirty: false, type: .openedDocument, path: url.path, createdAt: now, lastModified: now)
     }
 }
 

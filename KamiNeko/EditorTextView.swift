@@ -121,6 +121,7 @@ struct EditorTextView: NSViewRepresentable {
             guard let tv = notification.object as? NSTextView else { return }
             document.content = tv.string
             document.isDirty = true
+            document.updateLastModified()
             lastChange = Date()
             NotificationCenter.default.post(name: .documentEdited, object: nil)
             // 通知仅限当前文档，以避免多个窗口同步错误

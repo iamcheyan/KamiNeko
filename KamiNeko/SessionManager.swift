@@ -53,6 +53,7 @@ final class SessionManager {
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
         if let data = try? encoder.encode(sessions) {
             try? data.write (to: sessionFileURL)
         }
@@ -85,6 +86,7 @@ final class SessionManager {
         // Save all tab sessions to one file
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
         if let data = try? encoder.encode(tabSessions) {
             try? data.write(to: sessionFileURL)
         }
@@ -94,21 +96,83 @@ final class SessionManager {
         prepareDirectories()
         guard let data = try? Data(contentsOf: sessionFileURL) else { return [] }
         let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         guard let sessions = try? decoder.decode([DocumentSession].self, from: data) else { return [] }
         var docs: [DocumentModel] = []
         for s in sessions {
-            let snapshot = (s.contentFilePath != nil) ? (try? String(contentsOfFile: s.contentFilePath!)) : nil
-            if s.isUntitled {
-                let content = snapshot ?? ""
-                let doc = DocumentModel(id: s.id, title: s.title, content: content, fileURL: nil, fontSize: CGFloat(s.fontSize), isDirty: false)
-                docs.append(doc)
-            } else if let path = s.filePath {
-                let url = URL(fileURLWithPath: path)
-                let content = snapshot ?? ((try? String(contentsOf: url)) ?? "")
-                let doc = DocumentModel(id: s.id, title: URL(fileURLWithPath: path).lastPathComponent, content: content, fileURL: url, fontSize: CGFloat(s.fontSize), isDirty: false)
-                docs.append(doc)
+            let doc: DocumentModel
+            
+            switch s.type {
+            case .localDocument:
+                // 本地文档：使用存储的正文内容
+                let content = s.content ?? ""
+                doc = DocumentModel(
+                    id: s.id,
+                    title: s.title,
+                    content: content,
+                    fileURL: nil,
+                    fontSize: CGFloat(s.fontSize),
+                    isDirty: false,
+                    type: .localDocument,
+                    path: nil,
+                    createdAt: s.createdAt,
+                    lastModified: s.lastModified
+                )
+                
+            case .openedDocument:
+                // 打开文档：从路径加载内容
+                if let path = s.path {
+                    let url = URL(fileURLWithPath: path)
+                    let content = (try? String(contentsOf: url)) ?? ""
+                    doc = DocumentModel(
+                        id: s.id,
+                        title: s.title,
+                        content: content,
+                        fileURL: url,
+                        fontSize: CGFloat(s.fontSize),
+                        isDirty: false,
+                        type: .openedDocument,
+                        path: path,
+                        createdAt: s.createdAt,
+                        lastModified: s.lastModified
+                    )
+                } else {
+                    // 兜底：如果没有路径，创建为本地文档
+                    doc = DocumentModel(
+                        id: s.id,
+                        title: s.title,
+                        content: "",
+                        fileURL: nil,
+                        fontSize: CGFloat(s.fontSize),
+                        isDirty: false,
+                        type: .localDocument,
+                        path: nil,
+                        createdAt: s.createdAt,
+                        lastModified: s.lastModified
+                    )
+                }
+            }
+            
+            docs.append(doc)
+        }
+        
+        // 兼容旧格式的恢复逻辑
+        if docs.isEmpty {
+            for s in sessions {
+                let snapshot = (s.contentFilePath != nil) ? (try? String(contentsOfFile: s.contentFilePath!)) : nil
+                if s.isUntitled {
+                    let content = snapshot ?? ""
+                    let doc = DocumentModel(id: s.id, title: s.title, content: content, fileURL: nil, fontSize: CGFloat(s.fontSize), isDirty: false, type: .localDocument, createdAt: Date(), lastModified: Date())
+                    docs.append(doc)
+                } else if let path = s.filePath {
+                    let url = URL(fileURLWithPath: path)
+                    let content = snapshot ?? ((try? String(contentsOf: url)) ?? "")
+                    let doc = DocumentModel(id: s.id, title: URL(fileURLWithPath: path).lastPathComponent, content: content, fileURL: url, fontSize: CGFloat(s.fontSize), isDirty: false, type: .openedDocument, path: path, createdAt: Date(), lastModified: Date())
+                    docs.append(doc)
+                }
             }
         }
+        
         return docs
     }
 
@@ -171,7 +235,18 @@ final class SessionManager {
             for s in DocumentStore.allStores.allObjects {
                 for d in s.documents {
                     if let url = d.fileURL, d.isDirty {
-                        try? d.content.data(using: .utf8)?.write(to: url)
+                        // JSON 包装文件：写包装，同时如果是 opened_document 也写回原文件路径
+                        if url.pathExtension.lowercased() == "json" {
+                            d.updateLastModified()
+                            try? WorkingDirectoryManager.shared.saveDocumentToJSON(d, at: url)
+                            if d.type == .openedDocument, let p = d.path {
+                                let external = URL(fileURLWithPath: p)
+                                try? d.content.data(using: .utf8)?.write(to: external)
+                            }
+                        } else {
+                            // 非 JSON 兜底
+                            try? d.content.data(using: .utf8)?.write(to: url)
+                        }
                         d.isDirty = false
                     }
                 }

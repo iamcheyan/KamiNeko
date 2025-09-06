@@ -75,7 +75,7 @@ final class WorkingDirectoryManager {
             }
     }
 
-    func createNewEmptyFile(preferredBaseName: String? = nil, ext: String = "txt") throws -> URL {
+    func createNewEmptyFile(preferredBaseName: String? = nil, ext: String = "json") throws -> URL {
         guard let dir = directoryURL else { throw NSError(domain: "WorkingDirectory", code: 1, userInfo: [NSLocalizedDescriptionKey: "Working directory not set"]) }
         var didStart = false
         if dir.startAccessingSecurityScopedResource() { didStart = true }
@@ -87,11 +87,28 @@ final class WorkingDirectoryManager {
             candidate = dir.appendingPathComponent("\(base) \(index).\(ext)")
             index += 1
         }
-        try Data().write(to: candidate)
+        // 创建默认的本地文档JSON结构
+        let now = Date()
+        let defaultDoc = [
+            "id": UUID().uuidString,
+            "title": base,
+            "type": "local_document",
+            "content": "",
+            "path": NSNull(),
+            "createdAt": ISO8601DateFormatter().string(from: now),
+            "lastModified": ISO8601DateFormatter().string(from: now),
+            "fontSize": 14,
+            "contentFilePath": NSNull(),
+            "filePath": NSNull(),
+            "isUntitled": true
+        ] as [String : Any]
+        
+        let jsonData = try JSONSerialization.data(withJSONObject: defaultDoc, options: [.prettyPrinted, .withoutEscapingSlashes])
+        try jsonData.write(to: candidate)
         return candidate
     }
 
-    func renameFile(at url: URL, to newBaseName: String, ext: String = "txt") throws -> URL {
+    func renameFile(at url: URL, to newBaseName: String, ext: String = "json") throws -> URL {
         guard let dir = directoryURL else { throw NSError(domain: "WorkingDirectory", code: 2, userInfo: [NSLocalizedDescriptionKey: "Working directory not set"]) }
         var didStart = false
         if dir.startAccessingSecurityScopedResource() { didStart = true }
@@ -139,6 +156,112 @@ final class WorkingDirectoryManager {
                 try fileManager.removeItem(at: url)
             }
         }
+    }
+
+    // 从JSON文件加载文档信息
+    func loadDocumentFromJSON(at url: URL) -> DocumentModel? {
+        return withDirectoryAccess {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            
+            let id = UUID(uuidString: json["id"] as? String ?? "") ?? UUID()
+            let title = json["title"] as? String ?? url.deletingPathExtension().lastPathComponent
+            let typeString = json["type"] as? String ?? "local_document"
+            let type = DocumentType(rawValue: typeString) ?? .localDocument
+            let fontSize = json["fontSize"] as? Double ?? 14.0
+            
+            let dateFormatter = ISO8601DateFormatter()
+            let createdAt = (json["createdAt"] as? String).flatMap { dateFormatter.date(from: $0) } ?? Date()
+            let lastModified = (json["lastModified"] as? String).flatMap { dateFormatter.date(from: $0) } ?? Date()
+            
+            var content = ""
+            var path: String? = nil
+            // JSON 包装文件本身就是当前 url
+            let fileURL: URL? = url
+            
+            switch type {
+            case .localDocument:
+                content = json["content"] as? String ?? ""
+            case .openedDocument:
+                path = json["path"] as? String
+                if let pathString = path {
+                    let externalURL = URL(fileURLWithPath: pathString)
+                    content = (try? String(contentsOf: externalURL)) ?? ""
+                }
+            }
+            
+            return DocumentModel(
+                id: id,
+                title: title,
+                content: content,
+                fileURL: fileURL,
+                fontSize: CGFloat(fontSize),
+                isDirty: false,
+                type: type,
+                path: path,
+                createdAt: createdAt,
+                lastModified: lastModified
+            )
+        }
+    }
+    
+    // 将文档保存为JSON文件
+    func saveDocumentToJSON(_ document: DocumentModel, at url: URL) throws {
+        try withDirectoryAccess {
+            let jsonData = [
+                "id": document.id.uuidString,
+                "title": document.title,
+                "type": document.type.rawValue,
+                "content": document.type == .localDocument ? document.content : NSNull(),
+                "path": document.type == .openedDocument ? (document.path as Any? ?? NSNull()) : NSNull(),
+                "createdAt": ISO8601DateFormatter().string(from: document.createdAt),
+                "lastModified": ISO8601DateFormatter().string(from: document.lastModified),
+                "fontSize": Double(document.fontSize),
+                "contentFilePath": NSNull(),
+                "filePath": document.fileURL?.path ?? NSNull(),
+                "isUntitled": document.isUntitled
+            ] as [String : Any]
+            
+            let data = try JSONSerialization.data(withJSONObject: jsonData, options: [.prettyPrinted, .withoutEscapingSlashes])
+            try data.write(to: url)
+        }
+    }
+
+    /// 为外部文件创建一个放在工作目录的同名 JSON 包装文件（type = opened_document）
+    /// 返回创建的 JSON 文件 URL
+    func createJSONWrapperForExternalFile(_ externalURL: URL) throws -> URL {
+        guard let dir = directoryURL else {
+            throw NSError(domain: "WorkingDirectory", code: 3, userInfo: [NSLocalizedDescriptionKey: "Working directory not set"])
+        }
+        var didStart = false
+        if dir.startAccessingSecurityScopedResource() { didStart = true }
+        defer { if didStart { dir.stopAccessingSecurityScopedResource() } }
+
+        let base = externalURL.deletingPathExtension().lastPathComponent
+        var candidate = dir.appendingPathComponent("\(base).json")
+        var index = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            candidate = dir.appendingPathComponent("\(base) \(index).json")
+            index += 1
+        }
+
+        let now = Date()
+        let wrapper: [String: Any] = [
+            "id": UUID().uuidString,
+            "title": externalURL.lastPathComponent,
+            "type": "opened_document",
+            "content": NSNull(),
+            "path": externalURL.path,
+            "createdAt": ISO8601DateFormatter().string(from: now),
+            "lastModified": ISO8601DateFormatter().string(from: now),
+            "fontSize": 14,
+            "contentFilePath": NSNull(),
+            "filePath": externalURL.path,
+            "isUntitled": false
+        ]
+        let data = try JSONSerialization.data(withJSONObject: wrapper, options: [.prettyPrinted, .withoutEscapingSlashes])
+        try data.write(to: candidate)
+        return candidate
     }
 
     private func timestampString() -> String {

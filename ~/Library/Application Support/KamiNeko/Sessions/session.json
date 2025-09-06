@@ -1,0 +1,28 @@
+[
+  {
+    "id" : "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+    "title" : "示例本地文档",
+    "type" : "local_document",
+    "content" : "这是本地文档的正文内容\n可以包含多行文本\n支持中文显示",
+    "path" : null,
+    "createdAt" : "2025-01-07T17:20:00Z",
+    "lastModified" : "2025-01-07T17:25:30Z",
+    "fontSize" : 14,
+    "contentFilePath" : null,
+    "filePath" : null,
+    "isUntitled" : true
+  },
+  {
+    "id" : "B2C3D4E5-F6G7-8901-BCDE-F23456789012",
+    "title" : "README",
+    "type" : "opened_document", 
+    "content" : null,
+    "path" : "/Users/tetsuya/Dev/KamiNeko/README.md",
+    "createdAt" : "2025-01-07T17:20:00Z",
+    "lastModified" : "2025-01-07T17:21:15Z",
+    "fontSize" : 14,
+    "contentFilePath" : null,
+    "filePath" : "/Users/tetsuya/Dev/KamiNeko/README.md",
+    "isUntitled" : false
+  }
+]

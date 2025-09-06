@@ -56,17 +56,9 @@ struct ContentView: View {
                             return true
                         }
                         if files.isEmpty {
-                            // 目录为空：创建第一个文件
-                            if let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
-                                let doc = makeDoc(for: newURL)
-                                store.documents = [doc]
-                                store.selectedDocumentID = doc.id
-                            } else if let doc = initialDocument {
-                                store.documents = [doc]
-                                store.selectedDocumentID = doc.id
-                            } else {
-                                store.newUntitled()
-                            }
+                            // 目录为空：不创建任何标签或文件
+                            store.documents = []
+                            store.selectedDocumentID = nil
                         } else {
                             // 目录已有文件：首个在当前标签，其余扇出
                             let firstURL = files[0]
@@ -121,6 +113,15 @@ struct ContentView: View {
             updateTabCount()
         })
         view = AnyView(view.onDisappear { SessionManager.shared.stopAutoSave() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .workingDirectoryChanged)) { _ in
+            // 目录变更后：清空当前文档并从新目录创建首个文件
+            if let url = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
+                let doc = makeDoc(for: url)
+                store.documents = [doc]
+                store.selectedDocumentID = doc.id
+                updateWindowTitle()
+            }
+        })
         view = AnyView(view.preferredColorScheme(preferredScheme))
         view = AnyView(view.onChange(of: preferredSchemeRaw) { applyWindowAppearance() })
         view = AnyView(view.onChange(of: store.selectedDocumentID) {
@@ -150,12 +151,23 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarRedo)) { _ in performRedo() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in store.newUntitled() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarSaveSession)) { _ in SessionManager.shared.saveAllStores() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appSaveFile)) { _ in
+            // 写入当前文件并保存会话
+            SessionManager.shared.saveFileBackedDocumentsToDisk()
+            SessionManager.shared.saveAllStores()
+        })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in toggleAppearance() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewTab)) { _ in newTab() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarShowAllTabs)) { _ in showAllTabs() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentTitleChanged)) { _ in syncRenameIfNeeded() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
+            // 仅删除与当前窗口对应的文件
+            if SessionManager.shared.isTerminating { return }
+            if let url = store.selectedDocument()?.fileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        })
         return view
     }
 
@@ -176,6 +188,7 @@ struct ContentView: View {
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)
                     .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                        SessionManager.shared.saveFileBackedDocumentsToDisk()
                         SessionManager.shared.saveAllStores()
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .editorFontSizeChanged)) { output in
@@ -262,7 +275,8 @@ struct ContentView: View {
     private func updateWindowTitle() {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
         if let url = doc.fileURL {
-            window.title = url.path
+            // tab 显示文件名，原生标题栏点击可见完整路径
+            window.title = url.lastPathComponent
             window.representedURL = url
         } else {
             window.title = doc.title
@@ -286,7 +300,7 @@ struct ContentView: View {
         let controller = NSHostingController(rootView: ContentView(initialDocument: doc))
         let newWindow = NSWindow(contentViewController: controller)
         if let url = doc?.fileURL {
-            newWindow.title = url.path
+            newWindow.title = url.lastPathComponent
             newWindow.representedURL = url
         } else {
             newWindow.title = doc?.title ?? "Untitled"

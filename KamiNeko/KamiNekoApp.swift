@@ -30,6 +30,24 @@ struct KamiNekoApp: App {
                 }
                 .keyboardShortcut("-", modifiers: [.command])
             }
+            CommandMenu("文件") {
+                Button("保存") {
+                    NotificationCenter.default.post(name: .appSaveFile, object: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.command])
+            }
+            CommandMenu("工作目录") {
+                Button("显示当前工作目录") {
+                    if let url = WorkingDirectoryManager.shared.directoryURL {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+
+                Button("重新设置工作目录…") {
+                    _ = WorkingDirectoryManager.shared.promptUserToChooseDirectory()
+                }
+            }
         }
     }
 }

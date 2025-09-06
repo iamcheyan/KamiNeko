@@ -38,9 +38,11 @@ final class WorkingDirectoryManager {
                 if let data = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) {
                     defaults.set(data, forKey: bookmarkKey)
                 }
+                NotificationCenter.default.post(name: .workingDirectoryChanged, object: nil, userInfo: ["url": url])
             } else {
                 defaults.removeObject(forKey: userDefaultsKey)
                 defaults.removeObject(forKey: bookmarkKey)
+                NotificationCenter.default.post(name: .workingDirectoryChanged, object: nil)
             }
         }
     }
@@ -104,11 +106,24 @@ final class WorkingDirectoryManager {
         return dest
     }
 
+    // 以目录安全访问包裹执行文件写入等操作
+    func withDirectoryAccess<T>(_ work: () throws -> T) rethrows -> T {
+        guard let dir = directoryURL else { return try work() }
+        var didStart = false
+        if dir.startAccessingSecurityScopedResource() { didStart = true }
+        defer { if didStart { dir.stopAccessingSecurityScopedResource() } }
+        return try work()
+    }
+
     private func timestampString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter.string(from: Date())
     }
+}
+
+extension Notification.Name {
+    static let workingDirectoryChanged = Notification.Name("KamiNekoWorkingDirectoryChanged")
 }
 
 

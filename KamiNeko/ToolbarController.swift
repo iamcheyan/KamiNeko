@@ -58,7 +58,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         switch itemIdentifier {
         case centerId:
             let titleField = NSTextField(labelWithString: currentTitle())
-            titleField.font = .systemFont(ofSize: 13, weight: .medium)
+            titleField.font = .systemFont(ofSize: 12, weight: .regular)
             titleField.lineBreakMode = .byTruncatingMiddle
             titleField.alignment = .center
             titleField.textColor = .labelColor
@@ -72,7 +72,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
                 titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
                 titleField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
                 container.heightAnchor.constraint(equalToConstant: 22),
-                container.widthAnchor.constraint(lessThanOrEqualToConstant: 420)
+                container.widthAnchor.constraint(lessThanOrEqualToConstant: 900)
             ])
 
             let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(beginRename))
@@ -93,7 +93,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         case openId:
             return makeButtonItem(id: itemIdentifier, system: "folder", action: #selector(openFile))
         case saveId:
-            return makeButtonItem(id: itemIdentifier, system: "tray.and.arrow.down", action: #selector(saveSession))
+            return makeButtonItem(id: itemIdentifier, system: "tray.and.arrow.down", action: #selector(saveFile))
         case themeId:
             return makeButtonItem(id: itemIdentifier, system: "moon", action: #selector(toggleTheme))
         case zoomId:
@@ -131,7 +131,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     @objc private func redo() { NotificationCenter.default.post(name: .toolbarRedo, object: nil) }
     @objc private func newDoc() { NotificationCenter.default.post(name: .toolbarNewDoc, object: nil) }
     @objc private func openFile() { NotificationCenter.default.post(name: .toolbarOpenFile, object: nil) }
-    @objc private func saveSession() { NotificationCenter.default.post(name: .toolbarSaveSession, object: nil) }
+    @objc private func saveFile() { NotificationCenter.default.post(name: .appSaveFile, object: nil) }
     @objc private func toggleTheme() { NotificationCenter.default.post(name: .toolbarToggleTheme, object: nil) }
     @objc private func newTab() { NotificationCenter.default.post(name: .toolbarNewTab, object: nil) }
     @objc private func showAllTabs() { NotificationCenter.default.post(name: .toolbarShowAllTabs, object: nil) }
@@ -142,15 +142,12 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
 
     // MARK: - Title updates
     @objc private func updateTitle(_ note: Notification) {
-        if let t = note.userInfo?["title"] as? String {
-            titleLabel?.stringValue = t + " - KamiNeko"
-        } else {
-            titleLabel?.stringValue = currentTitle()
-        }
+        // 始终与窗口标题同步（窗口标题已设置为完整路径或文档标题）
+        titleLabel?.stringValue = currentTitle()
     }
 
     private func currentTitle() -> String {
-        (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")! + " - KamiNeko"
+        (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")!
     }
 
     @objc private func fontSizeChanged(_ note: Notification) {
@@ -164,7 +161,14 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     // MARK: - Rename support
     @objc private func beginRename() {
         guard let label = titleLabel, let superView = label.superview else { return }
-        let editor = NSTextField(string: label.stringValue.replacingOccurrences(of: " - KamiNeko", with: ""))
+        let source = NSApp.keyWindow?.title ?? label.stringValue
+        let initial: String = {
+            let url = URL(fileURLWithPath: source)
+            let name = url.deletingPathExtension().lastPathComponent
+            if name.isEmpty { return source }
+            return name
+        }()
+        let editor = NSTextField(string: initial)
         editor.font = label.font
         editor.isBezeled = true
         editor.bezelStyle = .roundedBezel
@@ -186,7 +190,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         let newTitle = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if newTitle.isEmpty == false {
             NotificationCenter.default.post(name: .documentRenameRequested, object: nil, userInfo: ["title": newTitle])
-            self.titleLabel?.stringValue = newTitle + " - KamiNeko"
+            self.titleLabel?.stringValue = currentTitle()
         }
         sender.removeFromSuperview()
         self.titleEditField = nil

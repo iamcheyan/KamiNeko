@@ -9,7 +9,7 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
-        // Hook reserved; saving handled in ContentView toolbar or termination observer
+        SessionManager.shared.isTerminating = true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

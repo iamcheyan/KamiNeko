@@ -14,6 +14,7 @@ final class SessionManager {
 
     private let fileManager = FileManager.default
     private var autosaveTimer: Timer?
+    var isTerminating: Bool = false
 
     // Fan-out queue for session restoration across system tabs
     // First ContentView will load sessions here and create (count-1) tabs.
@@ -143,15 +144,7 @@ final class SessionManager {
         stopAutoSave()
         autosaveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            // 优先写回文件夹中文件型文档
-            for s in DocumentStore.allStores.allObjects {
-                for d in s.documents {
-                    if let url = d.fileURL, d.isDirty {
-                        try? d.content.data(using: .utf8)?.write(to: url)
-                        d.isDirty = false
-                    }
-                }
-            }
+            self.saveFileBackedDocumentsToDisk()
             self.saveAllStores()
         }
         RunLoop.main.add(autosaveTimer!, forMode: .common)
@@ -160,6 +153,20 @@ final class SessionManager {
     func stopAutoSave() {
         autosaveTimer?.invalidate()
         autosaveTimer = nil
+    }
+
+    // 将所有文件型文档写入磁盘
+    func saveFileBackedDocumentsToDisk() {
+        WorkingDirectoryManager.shared.withDirectoryAccess {
+            for s in DocumentStore.allStores.allObjects {
+                for d in s.documents {
+                    if let url = d.fileURL, d.isDirty {
+                        try? d.content.data(using: .utf8)?.write(to: url)
+                        d.isDirty = false
+                    }
+                }
+            }
+        }
     }
 }
 

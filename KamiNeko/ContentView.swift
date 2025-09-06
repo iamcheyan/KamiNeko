@@ -60,33 +60,13 @@ struct ContentView: View {
             }
             SessionManager.shared.startAutoSave(store: store)
             updateWindowTitle()
+            applyWindowAppearance()
         }
         .onDisappear { SessionManager.shared.stopAutoSave() }
-        .toolbar {
-            // 左侧按钮（撤销、重做、新建、打开、保存）
-            ToolbarItemGroup(placement: .navigation) {
-                Button(action: performUndo) { Image(systemName: "arrow.uturn.backward") }
-                Button(action: performRedo) { Image(systemName: "arrow.uturn.forward") }
-                Divider().frame(height: 16)
-                Button(action: { store.newUntitled() }) { Image(systemName: "doc") }
-                Button(action: openFile) { Image(systemName: "folder") }
-                Button(action: { SessionManager.shared.saveAllStores() }) { Image(systemName: "tray.and.arrow.down") }
-            }
-            // 中部标题胶囊
-            // 中央标题留空，隐藏默认大标题视觉
-            ToolbarItem(placement: .principal) { EmptyView() }
-            // 右侧功能按钮（主题、新建Tab、显示所有Tab）
-            ToolbarItemGroup(placement: .automatic) {
-                Button(action: toggleAppearance) { Image(systemName: preferredScheme == .dark ? "sun.max" : "moon") }
-                Button(action: newTab) { Image(systemName: "plus") }
-                Button(action: showAllTabs) { Image(systemName: "square.grid.2x2") }
-            }
-        }
         .preferredColorScheme(preferredScheme)
-        .onAppear { applyWindowAppearance() }
         .onChange(of: preferredSchemeRaw) { _ in applyWindowAppearance() }
-        .onChange(of: store.selectedDocumentID) { _ in updateWindowTitle() }
         .onChange(of: store.selectedDocumentID) { _ in
+            updateWindowTitle()
             if let title = store.selectedDocument()?.title {
                 NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": title])
             }
@@ -95,6 +75,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .appZoomOut)) { _ in store.adjustFontSize(delta: -1) }
         .onReceive(NotificationCenter.default.publisher(for: .appZoomReset)) { _ in
             if let doc = store.selectedDocument() { doc.fontSize = 14 }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .documentRenameRequested)) { note in
+            if let name = note.userInfo?["title"] as? String, let doc = store.selectedDocument() {
+                doc.title = name
+                updateWindowTitle()
+                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": name])
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { _ in
             // Keep container width updated after scroll/resize

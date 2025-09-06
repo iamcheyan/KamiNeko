@@ -230,6 +230,7 @@ extension Notification.Name {
     static let toolbarNewTab = Notification.Name("KamiNekoToolbarNewTab")
     static let toolbarShowAllTabs = Notification.Name("KamiNekoToolbarShowAllTabs")
     static let documentTitleChanged = Notification.Name("KamiNekoDocumentTitleChanged")
+    static let documentRenameRequested = Notification.Name("KamiNekoDocumentRenameRequested")
 }
 
 

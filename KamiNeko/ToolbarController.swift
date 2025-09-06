@@ -12,8 +12,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     static let shared = BrowserToolbarController()
 
     private let toolbarIdentifier = NSToolbar.Identifier("KamiNeko.Toolbar")
-    private let backId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Back")
-    private let forwardId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Forward")
+    // Removed back/forward per UI requirements
     private let undoId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Undo")
     private let redoId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Redo")
     private let newId = NSToolbarItem.Identifier("KamiNeko.Toolbar.New")
@@ -26,7 +25,8 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
 
     private let centerId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Center")
     private var titleLabel: NSTextField?
-    private var zoomSegmented: NSSegmentedControl?
+    private var titleEditField: NSTextField?
+    private var zoomSlider: NSSlider?
 
     func attach(to window: NSWindow) {
         let toolbar = NSToolbar(identifier: toolbarIdentifier)
@@ -47,11 +47,11 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     // MARK: - Toolbar delegate
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [backId, forwardId, undoId, redoId, newId, openId, saveId, .flexibleSpace, centerId, themeId, zoomId, newTabId, allTabsId]
+        [undoId, redoId, newId, openId, saveId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, newTabId, allTabsId]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [backId, forwardId, undoId, redoId, .flexibleSpace, centerId, themeId, zoomId, newTabId, allTabsId]
+        [undoId, redoId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, newTabId, allTabsId]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -64,30 +64,26 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
             titleField.textColor = .labelColor
             titleField.translatesAutoresizingMaskIntoConstraints = false
 
-            let container = NSVisualEffectView()
-            container.material = .menu
-            container.state = .active
-            container.wantsLayer = true
+            let container = NSView()
             container.translatesAutoresizingMaskIntoConstraints = false
-            container.layer?.cornerRadius = 16
-            container.layer?.masksToBounds = true
             container.addSubview(titleField)
             NSLayoutConstraint.activate([
-                titleField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-                titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+                titleField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+                titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
                 titleField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                container.heightAnchor.constraint(equalToConstant: 30),
+                container.heightAnchor.constraint(equalToConstant: 22),
                 container.widthAnchor.constraint(lessThanOrEqualToConstant: 420)
             ])
+
+            let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(beginRename))
+            doubleClick.numberOfClicksRequired = 2
+            container.addGestureRecognizer(doubleClick)
 
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.view = container
             self.titleLabel = titleField
             return item
-        case backId:
-            return makeButtonItem(id: itemIdentifier, system: "chevron.left", action: #selector(back))
-        case forwardId:
-            return makeButtonItem(id: itemIdentifier, system: "chevron.right", action: #selector(forward))
+        
         case undoId:
             return makeButtonItem(id: itemIdentifier, system: "arrow.uturn.backward", action: #selector(undo))
         case redoId:
@@ -101,14 +97,15 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         case themeId:
             return makeButtonItem(id: itemIdentifier, system: "moon", action: #selector(toggleTheme))
         case zoomId:
-            let seg = NSSegmentedControl(labels: ["-", "100%", "+"], trackingMode: .momentary, target: self, action: #selector(zoomAction(_:)))
-            seg.segmentStyle = .rounded
-            seg.setWidth(28, forSegment: 0)
-            seg.setWidth(52, forSegment: 1)
-            seg.setWidth(28, forSegment: 2)
+            let slider = NSSlider(value: 14, minValue: 8, maxValue: 64, target: self, action: #selector(zoomSliderChanged(_:)))
+            slider.isContinuous = true
+            slider.controlSize = .small
+            slider.numberOfTickMarks = 0
+            slider.translatesAutoresizingMaskIntoConstraints = false
+            slider.widthAnchor.constraint(equalToConstant: 140).isActive = true
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.view = seg
-            self.zoomSegmented = seg
+            item.view = slider
+            self.zoomSlider = slider
             NotificationCenter.default.addObserver(self, selector: #selector(fontSizeChanged(_:)), name: .editorFontSizeChanged, object: nil)
             return item
         case newTabId:
@@ -129,8 +126,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     }
 
     // MARK: - Actions -> broadcast notifications
-    @objc private func back() { NotificationCenter.default.post(name: .toolbarBack, object: nil) }
-    @objc private func forward() { NotificationCenter.default.post(name: .toolbarForward, object: nil) }
+    // back/forward removed
     @objc private func undo() { NotificationCenter.default.post(name: .toolbarUndo, object: nil) }
     @objc private func redo() { NotificationCenter.default.post(name: .toolbarRedo, object: nil) }
     @objc private func newDoc() { NotificationCenter.default.post(name: .toolbarNewDoc, object: nil) }
@@ -139,12 +135,9 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     @objc private func toggleTheme() { NotificationCenter.default.post(name: .toolbarToggleTheme, object: nil) }
     @objc private func newTab() { NotificationCenter.default.post(name: .toolbarNewTab, object: nil) }
     @objc private func showAllTabs() { NotificationCenter.default.post(name: .toolbarShowAllTabs, object: nil) }
-    @objc private func zoomAction(_ sender: NSSegmentedControl) {
-        switch sender.selectedSegment {
-        case 0: NotificationCenter.default.post(name: .appZoomOut, object: nil)
-        case 1: NotificationCenter.default.post(name: .appZoomReset, object: nil)
-        default: NotificationCenter.default.post(name: .appZoomIn, object: nil)
-        }
+    @objc private func zoomSliderChanged(_ sender: NSSlider) {
+        let size = CGFloat(sender.doubleValue)
+        NotificationCenter.default.post(name: .editorFontSizeChanged, object: nil, userInfo: ["fontSize": size])
     }
 
     // MARK: - Title updates
@@ -161,10 +154,43 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     }
 
     @objc private func fontSizeChanged(_ note: Notification) {
-        if let tv = note.object as? NSTextView, let size = tv.font?.pointSize {
-            let percent = Int((size / 14.0) * 100.0)
-            zoomSegmented?.setLabel("\(percent)%", forSegment: 1)
+        if let size = note.userInfo? ["fontSize"] as? CGFloat {
+            zoomSlider?.doubleValue = Double(size)
+        } else if let tv = note.object as? NSTextView, let size = tv.font?.pointSize {
+            zoomSlider?.doubleValue = Double(size)
         }
+    }
+
+    // MARK: - Rename support
+    @objc private func beginRename() {
+        guard let label = titleLabel, let superView = label.superview else { return }
+        let editor = NSTextField(string: label.stringValue.replacingOccurrences(of: " - KamiNeko", with: ""))
+        editor.font = label.font
+        editor.isBezeled = true
+        editor.bezelStyle = .roundedBezel
+        editor.drawsBackground = true
+        editor.focusRingType = .default
+        editor.translatesAutoresizingMaskIntoConstraints = false
+        editor.target = self
+        editor.action = #selector(commitRename(_:))
+        superView.addSubview(editor)
+        editor.leadingAnchor.constraint(equalTo: superView.leadingAnchor).isActive = true
+        editor.trailingAnchor.constraint(equalTo: superView.trailingAnchor).isActive = true
+        editor.centerYAnchor.constraint(equalTo: superView.centerYAnchor).isActive = true
+        label.isHidden = true
+        self.titleEditField = editor
+        superView.window?.makeFirstResponder(editor)
+    }
+
+    @objc private func commitRename(_ sender: NSTextField) {
+        let newTitle = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if newTitle.isEmpty == false {
+            NotificationCenter.default.post(name: .documentRenameRequested, object: nil, userInfo: ["title": newTitle])
+            self.titleLabel?.stringValue = newTitle + " - KamiNeko"
+        }
+        sender.removeFromSuperview()
+        self.titleEditField = nil
+        self.titleLabel?.isHidden = false
     }
 }
 

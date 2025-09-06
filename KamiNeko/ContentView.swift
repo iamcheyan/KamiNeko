@@ -21,6 +21,7 @@ struct ContentView: View {
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
     // Using system window tabs; no custom tab height needed
     @State private var tabCount: Int = 1
+    @State private var owningWindow: NSWindow? = nil
 
     private var preferredScheme: ColorScheme? {
         switch preferredSchemeRaw {
@@ -31,7 +32,18 @@ struct ContentView: View {
     }
 
     var body: some View {
-        applyGlobalHandlers(rootView())
+        applyGlobalHandlers(
+            AnyView(
+                rootView()
+                    .background(WindowAccessor { win in
+                        // 只绑定一次所属窗口，避免不同实例互相覆盖
+                        if owningWindow == nil {
+                            owningWindow = win
+                            updateWindowTitle()
+                        }
+                    })
+            )
+        )
     }
 
     // 将全局事件与修饰器集中，降低 body 表达式复杂度
@@ -193,20 +205,20 @@ struct ContentView: View {
                 updateWindowTitle()
             }
         })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
-            // 关闭标签即删除对应文件；随后若没有任何标签，则删除工作目录内所有文件
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if let win = note.object as? NSWindow, win === owningWindow {
+                updateWindowTitle()
+            }
+            updateTabCount()
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+            // 应用退出时不做任何删除
+            if SessionManager.shared.isTerminating { return }
+            // 仅处理当前视图所属窗口的关闭事件，避免误删其它窗口文件
+            guard let closingWindow = note.object as? NSWindow, closingWindow === owningWindow else { return }
             if let url = store.selectedDocument()?.fileURL {
                 _ = WorkingDirectoryManager.shared.withDirectoryAccess {
                     try? WorkingDirectoryManager.shared.deleteFile(at: url)
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                let anyWindowVisible = NSApp.windows.contains { $0.isVisible }
-                let anyStoreAlive = (DocumentStore.allStores.allObjects.isEmpty == false)
-                if !anyWindowVisible || !anyStoreAlive {
-                    let files = WorkingDirectoryManager.shared.listFiles()
-                    for f in files { try? WorkingDirectoryManager.shared.deleteFile(at: f) }
                 }
             }
         })
@@ -349,7 +361,7 @@ struct ContentView: View {
     }
 
     private func updateWindowTitle() {
-        guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
+        guard let window = owningWindow, let doc = store.selectedDocument() else { return }
         let fallback = doc.fileURL?.lastPathComponent ?? doc.title
         let display = computeDisplayTitle(from: doc.content, fallback: fallback)
         let truncated = display.count > 40 ? String(display.prefix(40)) : display
@@ -359,7 +371,7 @@ struct ContentView: View {
     }
 
     private func updateWindowTitleFromContent(maxLength: Int = 40) {
-        guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
+        guard let window = owningWindow, let doc = store.selectedDocument() else { return }
         let raw = doc.content
         let display: String = computeDisplayTitle(from: raw, fallback: doc.fileURL?.lastPathComponent ?? doc.title)
         let truncated = display.count > maxLength ? String(display.prefix(maxLength)) : display
@@ -486,6 +498,23 @@ struct ContentView: View {
             (try? String(contentsOf: url)) ?? ""
         }
         return DocumentModel(title: title, content: content, fileURL: url, isDirty: false)
+    }
+}
+
+// MARK: - WindowAccessor: 捕获 NSWindow 引用
+private struct WindowAccessor: NSViewRepresentable {
+    let onResolve: (NSWindow) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            if let win = view?.window { onResolve(win) }
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            if let win = nsView?.window { onResolve(win) }
+        }
     }
 }
 

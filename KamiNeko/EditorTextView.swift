@@ -54,6 +54,10 @@ struct EditorTextView: NSViewRepresentable {
         }
         scrollView.documentView = textView
 
+        // 注册文件拖拽类型（强化接收 file URL）
+        scrollView.registerForDraggedTypes([.fileURL])
+        textView.registerForDraggedTypes([.fileURL])
+
         // Line number ruler after documentView is set
         let lineNumberRuler = LineNumberRulerView(textView: textView, scrollView: scrollView)
         scrollView.verticalRulerView = lineNumberRuler
@@ -304,8 +308,10 @@ final class ZoomableTextView: NSTextView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let urls = readFileURLs(from: sender), urls.isEmpty == false else { return false }
-        for url in urls {
-            NotificationCenter.default.post(name: .openFileURLDropped, object: nil, userInfo: ["url": url])
+        DispatchQueue.main.async {
+            for url in urls {
+                NotificationCenter.default.post(name: .openFileURLDropped, object: nil, userInfo: ["url": url])
+            }
         }
         return true
     }
@@ -321,6 +327,7 @@ final class ZoomableTextView: NSTextView {
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [NSPasteboard.ReadingOptionKey.urlReadingFileURLsOnly: true]) as? [URL] {
             return urls
         }
+        if let str = pb.string(forType: .fileURL), let url = URL(string: str) { return [url] }
         return nil
     }
 }

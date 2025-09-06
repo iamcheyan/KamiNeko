@@ -54,6 +54,31 @@ enum Localizer {
         // ContentView
         "content.placeholder": ["zh-Hans": "新建文档或打开文件", "en": "Create a document or open a file", "ja": "新規作成またはファイルを開く"],
         "tabs.count": ["zh-Hans": "已打开标签：", "en": "Open tabs: ", "ja": "開いているタブ："],
+
+        // Context menu common items
+        "menu.cut": ["zh-Hans": "剪切", "en": "Cut", "ja": "カット"],
+        "menu.copy": ["zh-Hans": "复制", "en": "Copy", "ja": "コピー"],
+        "menu.paste": ["zh-Hans": "粘贴", "en": "Paste", "ja": "ペースト"],
+        "menu.selectAll": ["zh-Hans": "全选", "en": "Select All", "ja": "すべてを選択"],
+        "menu.font": ["zh-Hans": "字体", "en": "Font", "ja": "フォント"],
+        "menu.spellingGrammar": ["zh-Hans": "拼写与语法", "en": "Spelling and Grammar", "ja": "スペルと文法"],
+        "menu.substitutions": ["zh-Hans": "替换", "en": "Substitutions", "ja": "置換"],
+        "menu.transformations": ["zh-Hans": "转换", "en": "Transformations", "ja": "変換"],
+        "menu.speech": ["zh-Hans": "语音", "en": "Speech", "ja": "スピーチ"],
+        "menu.layoutOrientation": ["zh-Hans": "版式方向", "en": "Layout Orientation", "ja": "レイアウトの方向"],
+        "menu.showWritingTools": ["zh-Hans": "显示写作工具", "en": "Show Writing Tools", "ja": "ライティングツールを表示"],
+        "menu.proofread": ["zh-Hans": "校对", "en": "Proofread", "ja": "校正"],
+        "menu.rewrite": ["zh-Hans": "改写", "en": "Rewrite", "ja": "書き直し"],
+
+        // App main menu (Application menu) templates
+        // Use String(format:) with one %@ placeholder for app name
+        "menu.aboutApp": ["zh-Hans": "关于 %@", "en": "About %@", "ja": "%@ について"],
+        "menu.settings": ["zh-Hans": "设置…", "en": "Settings…", "ja": "設定…"],
+        "menu.services": ["zh-Hans": "服务", "en": "Services", "ja": "サービス"],
+        "menu.hideApp": ["zh-Hans": "隐藏 %@", "en": "Hide %@", "ja": "%@ を隠す"],
+        "menu.hideOthers": ["zh-Hans": "隐藏其他", "en": "Hide Others", "ja": "ほかを隠す"],
+        "menu.showAll": ["zh-Hans": "全部显示", "en": "Show All", "ja": "すべてを表示"],
+        "menu.quitApp": ["zh-Hans": "退出 %@", "en": "Quit %@", "ja": "%@ を終了"],
     ]
 }
 

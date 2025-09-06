@@ -248,6 +248,52 @@ final class ZoomableTextView: NSTextView {
         CATransaction.commit()
     }
 
+    // MARK: - Context menu runtime localization
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let original = super.menu(for: event) ?? NSMenu()
+        // Work on a copy to avoid mutating shared templates
+        let menu = original.copy() as? NSMenu ?? original
+        localizeStandardMenu(menu)
+        return menu
+    }
+
+    private func localizeStandardMenu(_ menu: NSMenu) {
+        for item in menu.items {
+            if let action = item.action {
+                switch action {
+                case #selector(NSText.cut(_:)):
+                    item.title = Localizer.t("menu.cut")
+                case #selector(NSText.copy(_:)):
+                    item.title = Localizer.t("menu.copy")
+                case #selector(NSText.paste(_:)):
+                    item.title = Localizer.t("menu.paste")
+                case #selector(NSText.selectAll(_:)):
+                    item.title = Localizer.t("menu.selectAll")
+                default:
+                    break
+                }
+            }
+            // Fallback by common English titles (system may not expose actions for section headers)
+            let title = item.title
+            let fallbackMap: [String: String] = [
+                "Font": Localizer.t("menu.font"),
+                "Spelling and Grammar": Localizer.t("menu.spellingGrammar"),
+                "Substitutions": Localizer.t("menu.substitutions"),
+                "Transformations": Localizer.t("menu.transformations"),
+                "Speech": Localizer.t("menu.speech"),
+                "Layout Orientation": Localizer.t("menu.layoutOrientation"),
+                "Services": Localizer.t("menu.services"),
+                "Show Writing Tools": Localizer.t("menu.showWritingTools"),
+                "Proofread": Localizer.t("menu.proofread"),
+                "Rewrite": Localizer.t("menu.rewrite")
+            ]
+            if let localized = fallbackMap[title] {
+                item.title = localized
+            }
+            if let submenu = item.submenu { localizeStandardMenu(submenu) }
+        }
+    }
+
     // MARK: - Drag & Drop to open files in new tab (prevent path insertion)
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         if hasFileURLs(in: sender) { return .copy }

@@ -19,6 +19,7 @@ struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @State private var isShowingOpenPanel = false
     @State private var isDropTarget: Bool = false
+    @AppStorage("appLanguage") private var appLanguage: String = "system"
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
     // Using system window tabs; no custom tab height needed
     @State private var tabCount: Int = 1
@@ -145,6 +146,11 @@ struct ContentView: View {
         })
         view = AnyView(view.preferredColorScheme(preferredScheme))
         view = AnyView(view.onChange(of: preferredSchemeRaw) { applyWindowAppearance() })
+        // 监听语言切换以触发 SwiftUI 视图重绘（系统组件将在重启后切换语言）
+        view = AnyView(view.onChange(of: appLanguage) {
+            // 触发必要的 UI 刷新
+            updateWindowTitle()
+        })
         view = AnyView(view.onChange(of: store.selectedDocumentID) {
             updateWindowTitle()
             if let title = store.selectedDocument()?.title {

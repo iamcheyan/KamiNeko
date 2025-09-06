@@ -123,6 +123,7 @@ struct EditorTextView: NSViewRepresentable {
             document.isDirty = true
             lastChange = Date()
             NotificationCenter.default.post(name: .documentEdited, object: nil)
+            NotificationCenter.default.post(name: .documentContentChanged, object: nil)
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
@@ -329,6 +330,7 @@ extension Notification.Name {
     static let documentTitleChanged = Notification.Name("KamiNekoDocumentTitleChanged")
     static let documentRenameRequested = Notification.Name("KamiNekoDocumentRenameRequested")
     static let documentEdited = Notification.Name("KamiNekoDocumentEdited")
+    static let documentContentChanged = Notification.Name("KamiNekoDocumentContentChanged")
 }
 
 

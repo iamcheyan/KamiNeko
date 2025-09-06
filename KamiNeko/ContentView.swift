@@ -331,16 +331,40 @@ struct ContentView: View {
 
     private func updateWindowTitle() {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
-        if let url = doc.fileURL {
-            // tab 显示文件名，但中间标题显示完整路径
-            window.title = url.lastPathComponent
-            window.representedURL = url
-            NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": url.path])
-        } else {
-            window.title = doc.title
-            window.representedURL = nil
-            NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": doc.title])
+        let fallback = doc.fileURL?.lastPathComponent ?? doc.title
+        let display = computeDisplayTitle(from: doc.content, fallback: fallback)
+        let truncated = display.count > 40 ? String(display.prefix(40)) : display
+        window.title = truncated
+        if let url = doc.fileURL { window.representedURL = url } else { window.representedURL = nil }
+        NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": window.representedURL != nil ? (window.representedURL!.path) : truncated])
+    }
+
+    private func updateWindowTitleFromContent(maxLength: Int = 40) {
+        guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
+        let raw = doc.content
+        let display: String = computeDisplayTitle(from: raw, fallback: doc.fileURL?.lastPathComponent ?? doc.title)
+        let truncated = display.count > maxLength ? String(display.prefix(maxLength)) : display
+        window.title = truncated
+        NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": window.representedURL != nil ? (window.representedURL!.path) : truncated])
+    }
+
+    private func computeDisplayTitle(from content: String, fallback: String) -> String {
+        let lines = content.split(maxSplits: 10, omittingEmptySubsequences: true, whereSeparator: { $0 == "\n" || $0 == "\r" })
+        guard let first = lines.first else { return fallback }
+        let firstLine = String(first)
+        // Pattern like Swift header comments
+        if firstLine.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).hasPrefix("//") {
+            for lineSub in lines.prefix(5) {
+                var s = String(lineSub)
+                s = s.replacingOccurrences(of: "//", with: "").trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                if s.hasSuffix(".swift") || s.hasSuffix(".txt") { return s }
+            }
+            if let nonComment = lines.drop(while: { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).hasPrefix("//") }).first {
+                return String(nonComment)
+            }
+            return fallback
         }
+        return firstLine
     }
 
     private func performUndo() { NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil) }
@@ -361,11 +385,13 @@ struct ContentView: View {
         guard let base = baseWindow else { return }
         let controller = NSHostingController(rootView: ContentView(initialDocument: doc))
         let newWindow = NSWindow(contentViewController: controller)
-        if let url = doc?.fileURL {
-            newWindow.title = url.lastPathComponent
-            newWindow.representedURL = url
+        if let doc = doc {
+            let fallback = doc.fileURL?.lastPathComponent ?? doc.title
+            let display = computeDisplayTitle(from: doc.content, fallback: fallback)
+            newWindow.title = display.count > 40 ? String(display.prefix(40)) : display
+            newWindow.representedURL = doc.fileURL
         } else {
-            newWindow.title = doc?.title ?? "Untitled"
+            newWindow.title = "Untitled"
             newWindow.representedURL = nil
         }
         newWindow.tabbingMode = .preferred

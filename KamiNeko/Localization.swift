@@ -79,6 +79,21 @@ enum Localizer {
         "menu.hideOthers": ["zh-Hans": "隐藏其他", "en": "Hide Others", "ja": "ほかを隠す"],
         "menu.showAll": ["zh-Hans": "全部显示", "en": "Show All", "ja": "すべてを表示"],
         "menu.quitApp": ["zh-Hans": "退出 %@", "en": "Quit %@", "ja": "%@ を終了"],
+
+        // Top menu bar titles
+        "menu.file": ["zh-Hans": "文件", "en": "File", "ja": "ファイル"],
+        "menu.edit": ["zh-Hans": "编辑", "en": "Edit", "ja": "編集"],
+        "menu.view": ["zh-Hans": "显示", "en": "View", "ja": "表示"],
+        "menu.window": ["zh-Hans": "窗口", "en": "Window", "ja": "ウインドウ"],
+        "menu.help": ["zh-Hans": "帮助", "en": "Help", "ja": "ヘルプ"],
+
+        // Tab / Window menu items
+        "menu.closeTab": ["zh-Hans": "关闭标签", "en": "Close Tab", "ja": "タブを閉じる"],
+        "menu.closeOtherTabs": ["zh-Hans": "关闭其他标签", "en": "Close Other Tabs", "ja": "ほかのタブを閉じる"],
+        "menu.moveTabToNewWindow": ["zh-Hans": "将标签移至新窗口", "en": "Move Tab to New Window", "ja": "タブを新規ウインドウに移動"],
+        "menu.showAllTabs": ["zh-Hans": "显示所有标签", "en": "Show All Tabs", "ja": "すべてのタブを表示"],
+        "menu.showTabBar": ["zh-Hans": "显示标签栏", "en": "Show Tab Bar", "ja": "タブバーを表示"],
+        "menu.hideTabBar": ["zh-Hans": "隐藏标签栏", "en": "Hide Tab Bar", "ja": "タブバーを隠す"],
     ]
 }
 

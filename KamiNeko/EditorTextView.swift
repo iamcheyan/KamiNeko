@@ -123,7 +123,8 @@ struct EditorTextView: NSViewRepresentable {
             document.isDirty = true
             lastChange = Date()
             NotificationCenter.default.post(name: .documentEdited, object: nil)
-            NotificationCenter.default.post(name: .documentContentChanged, object: nil)
+            // 通知仅限当前文档，以避免多个窗口同步错误
+            NotificationCenter.default.post(name: .documentContentChanged, object: document)
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {

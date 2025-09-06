@@ -183,6 +183,12 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewTab)) { _ in newTab() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarShowAllTabs)) { _ in showAllTabs() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentTitleChanged)) { _ in syncRenameIfNeeded() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentContentChanged)) { note in
+            // 仅当变更的是当前选中文档，才更新标题
+            if let changedDoc = note.object as? DocumentModel, changedDoc.id == store.selectedDocumentID {
+                updateWindowTitle()
+            }
+        })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
             // 仅删除与当前窗口对应的空白文件
@@ -354,17 +360,33 @@ struct ContentView: View {
         let firstLine = String(first)
         // Pattern like Swift header comments
         if firstLine.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).hasPrefix("//") {
+            // 优先使用第一行注释内容（去掉开头标点），若为空再向下找
+            let firstSanitized = sanitizeLeadingPunctuation(firstLine.replacingOccurrences(of: "//", with: ""))
+            if firstSanitized.isEmpty == false { return firstSanitized }
             for lineSub in lines.prefix(5) {
                 var s = String(lineSub)
                 s = s.replacingOccurrences(of: "//", with: "").trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                 if s.hasSuffix(".swift") || s.hasSuffix(".txt") { return s }
             }
             if let nonComment = lines.drop(while: { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).hasPrefix("//") }).first {
-                return String(nonComment)
+                return sanitizeLeadingPunctuation(String(nonComment))
             }
             return fallback
         }
-        return firstLine
+        return sanitizeLeadingPunctuation(firstLine)
+    }
+
+    private func sanitizeLeadingPunctuation(_ s: String) -> String {
+        var result = s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        var charset = CharacterSet.punctuationCharacters
+        charset.formUnion(.symbols)
+        charset.formUnion(.whitespacesAndNewlines)
+        let extra = CharacterSet(charactersIn: "／、，。！？；：—…·・*_#-=+|<>[](){}\\/\"'`~“”‘’《》【】（）")
+        charset.formUnion(extra)
+        while let first = result.first, String(first).rangeOfCharacter(from: charset) != nil {
+            result.removeFirst()
+        }
+        return result
     }
 
     private func performUndo() { NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil) }

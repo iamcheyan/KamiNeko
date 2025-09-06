@@ -1,0 +1,171 @@
+//
+//  ToolbarController.swift
+//  KamiNeko
+//
+//  Safari-like titlebar toolbar and centered pill.
+//
+
+import AppKit
+import SwiftUI
+
+final class BrowserToolbarController: NSObject, NSToolbarDelegate {
+    static let shared = BrowserToolbarController()
+
+    private let toolbarIdentifier = NSToolbar.Identifier("KamiNeko.Toolbar")
+    private let backId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Back")
+    private let forwardId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Forward")
+    private let undoId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Undo")
+    private let redoId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Redo")
+    private let newId = NSToolbarItem.Identifier("KamiNeko.Toolbar.New")
+    private let openId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Open")
+    private let saveId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Save")
+    private let themeId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Theme")
+    private let newTabId = NSToolbarItem.Identifier("KamiNeko.Toolbar.NewTab")
+    private let allTabsId = NSToolbarItem.Identifier("KamiNeko.Toolbar.AllTabs")
+    private let zoomId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Zoom")
+
+    private let centerId = NSToolbarItem.Identifier("KamiNeko.Toolbar.Center")
+    private var titleLabel: NSTextField?
+    private var zoomSegmented: NSSegmentedControl?
+
+    func attach(to window: NSWindow) {
+        let toolbar = NSToolbar(identifier: toolbarIdentifier)
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.sizeMode = .regular
+        toolbar.allowsUserCustomization = false
+        toolbar.centeredItemIdentifier = centerId
+        window.toolbar = toolbar
+        window.titleVisibility = .hidden
+        if #available(macOS 13.0, *) {
+            window.toolbarStyle = .unifiedCompact
+        }
+
+        NotificationCenter.default.addObserver(self, selector: #selector(updateTitle(_:)), name: .documentTitleChanged, object: nil)
+    }
+
+    // MARK: - Toolbar delegate
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [backId, forwardId, undoId, redoId, newId, openId, saveId, .flexibleSpace, centerId, themeId, zoomId, newTabId, allTabsId]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [backId, forwardId, undoId, redoId, .flexibleSpace, centerId, themeId, zoomId, newTabId, allTabsId]
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        switch itemIdentifier {
+        case centerId:
+            let titleField = NSTextField(labelWithString: currentTitle())
+            titleField.font = .systemFont(ofSize: 13, weight: .medium)
+            titleField.lineBreakMode = .byTruncatingMiddle
+            titleField.alignment = .center
+            titleField.textColor = .labelColor
+            titleField.translatesAutoresizingMaskIntoConstraints = false
+
+            let container = NSVisualEffectView()
+            container.material = .menu
+            container.state = .active
+            container.wantsLayer = true
+            container.translatesAutoresizingMaskIntoConstraints = false
+            container.layer?.cornerRadius = 16
+            container.layer?.masksToBounds = true
+            container.addSubview(titleField)
+            NSLayoutConstraint.activate([
+                titleField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+                titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+                titleField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                container.heightAnchor.constraint(equalToConstant: 30),
+                container.widthAnchor.constraint(lessThanOrEqualToConstant: 420)
+            ])
+
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.view = container
+            self.titleLabel = titleField
+            return item
+        case backId:
+            return makeButtonItem(id: itemIdentifier, system: "chevron.left", action: #selector(back))
+        case forwardId:
+            return makeButtonItem(id: itemIdentifier, system: "chevron.right", action: #selector(forward))
+        case undoId:
+            return makeButtonItem(id: itemIdentifier, system: "arrow.uturn.backward", action: #selector(undo))
+        case redoId:
+            return makeButtonItem(id: itemIdentifier, system: "arrow.uturn.forward", action: #selector(redo))
+        case newId:
+            return makeButtonItem(id: itemIdentifier, system: "doc", action: #selector(newDoc))
+        case openId:
+            return makeButtonItem(id: itemIdentifier, system: "folder", action: #selector(openFile))
+        case saveId:
+            return makeButtonItem(id: itemIdentifier, system: "tray.and.arrow.down", action: #selector(saveSession))
+        case themeId:
+            return makeButtonItem(id: itemIdentifier, system: "moon", action: #selector(toggleTheme))
+        case zoomId:
+            let seg = NSSegmentedControl(labels: ["-", "100%", "+"], trackingMode: .momentary, target: self, action: #selector(zoomAction(_:)))
+            seg.segmentStyle = .rounded
+            seg.setWidth(28, forSegment: 0)
+            seg.setWidth(52, forSegment: 1)
+            seg.setWidth(28, forSegment: 2)
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.view = seg
+            self.zoomSegmented = seg
+            NotificationCenter.default.addObserver(self, selector: #selector(fontSizeChanged(_:)), name: .editorFontSizeChanged, object: nil)
+            return item
+        case newTabId:
+            return makeButtonItem(id: itemIdentifier, system: "plus", action: #selector(newTab))
+        case allTabsId:
+            return makeButtonItem(id: itemIdentifier, system: "square.grid.2x2", action: #selector(showAllTabs))
+        default:
+            return nil
+        }
+    }
+
+    private func makeButtonItem(id: NSToolbarItem.Identifier, system: String, action: Selector) -> NSToolbarItem {
+        let button = NSButton(image: NSImage(systemSymbolName: system, accessibilityDescription: nil)!, target: self, action: action)
+        button.bezelStyle = .texturedRounded
+        let item = NSToolbarItem(itemIdentifier: id)
+        item.view = button
+        return item
+    }
+
+    // MARK: - Actions -> broadcast notifications
+    @objc private func back() { NotificationCenter.default.post(name: .toolbarBack, object: nil) }
+    @objc private func forward() { NotificationCenter.default.post(name: .toolbarForward, object: nil) }
+    @objc private func undo() { NotificationCenter.default.post(name: .toolbarUndo, object: nil) }
+    @objc private func redo() { NotificationCenter.default.post(name: .toolbarRedo, object: nil) }
+    @objc private func newDoc() { NotificationCenter.default.post(name: .toolbarNewDoc, object: nil) }
+    @objc private func openFile() { NotificationCenter.default.post(name: .toolbarOpenFile, object: nil) }
+    @objc private func saveSession() { NotificationCenter.default.post(name: .toolbarSaveSession, object: nil) }
+    @objc private func toggleTheme() { NotificationCenter.default.post(name: .toolbarToggleTheme, object: nil) }
+    @objc private func newTab() { NotificationCenter.default.post(name: .toolbarNewTab, object: nil) }
+    @objc private func showAllTabs() { NotificationCenter.default.post(name: .toolbarShowAllTabs, object: nil) }
+    @objc private func zoomAction(_ sender: NSSegmentedControl) {
+        switch sender.selectedSegment {
+        case 0: NotificationCenter.default.post(name: .appZoomOut, object: nil)
+        case 1: NotificationCenter.default.post(name: .appZoomReset, object: nil)
+        default: NotificationCenter.default.post(name: .appZoomIn, object: nil)
+        }
+    }
+
+    // MARK: - Title updates
+    @objc private func updateTitle(_ note: Notification) {
+        if let t = note.userInfo?["title"] as? String {
+            titleLabel?.stringValue = t + " - KamiNeko"
+        } else {
+            titleLabel?.stringValue = currentTitle()
+        }
+    }
+
+    private func currentTitle() -> String {
+        (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")! + " - KamiNeko"
+    }
+
+    @objc private func fontSizeChanged(_ note: Notification) {
+        if let tv = note.object as? NSTextView, let size = tv.font?.pointSize {
+            let percent = Int((size / 14.0) * 100.0)
+            zoomSegmented?.setLabel("\(percent)%", forSegment: 1)
+        }
+    }
+}
+
+

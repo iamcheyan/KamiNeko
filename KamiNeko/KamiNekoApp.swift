@@ -11,11 +11,12 @@ import AppKit
 @main
 struct KamiNekoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .windowStyle(.automatic)
+        .windowStyle(.titleBar)
         .defaultSize(width: 980, height: 700)
         .commands {
             CommandMenu("字体") {

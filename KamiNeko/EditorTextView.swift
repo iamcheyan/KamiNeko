@@ -12,9 +12,10 @@ struct EditorTextView: NSViewRepresentable {
     @ObservedObject var document: DocumentModel
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = ZoomableScrollView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.horizontalScrollElasticity = .none
         scrollView.autohidesScrollers = true
 
         let textView = ZoomableTextView()
@@ -71,6 +72,10 @@ struct EditorTextView: NSViewRepresentable {
         if abs(currentSize - document.fontSize) > 0.5 {
             textView.font = NSFont.monospacedSystemFont(ofSize: document.fontSize, weight: .regular)
         }
+        if let container = textView.textContainer, let sv = textView.enclosingScrollView {
+            container.widthTracksTextView = true
+            container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
+        }
         (nsView.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
 
         // Try to focus the text view when available
@@ -126,6 +131,27 @@ final class ZoomableTextView: NSTextView {
                 (enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
                 // Do not call super; avoid scrolling when zooming
                 return
+            }
+        }
+        super.scrollWheel(with: event)
+    }
+}
+
+final class ZoomableScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command) {
+            if let tv = self.documentView as? NSTextView {
+                let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY
+                let step: CGFloat = delta > 0 ? 1 : -1
+                let current = tv.font?.pointSize ?? 14
+                let newSize = max(8, min(64, current + step))
+                if newSize != current {
+                    tv.font = NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
+                    NotificationCenter.default.post(name: .editorFontSizeChanged, object: tv, userInfo: ["fontSize": newSize])
+                    (self.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+                    return
+                }
             }
         }
         super.scrollWheel(with: event)
@@ -192,6 +218,18 @@ extension Notification.Name {
     static let editorFontSizeChanged = Notification.Name("EditorFontSizeChanged")
     static let appZoomIn = Notification.Name("KamiNekoZoomIn")
     static let appZoomOut = Notification.Name("KamiNekoZoomOut")
+    static let appZoomReset = Notification.Name("KamiNekoZoomReset")
+    static let toolbarUndo = Notification.Name("KamiNekoToolbarUndo")
+    static let toolbarRedo = Notification.Name("KamiNekoToolbarRedo")
+    static let toolbarBack = Notification.Name("KamiNekoToolbarBack")
+    static let toolbarForward = Notification.Name("KamiNekoToolbarForward")
+    static let toolbarNewDoc = Notification.Name("KamiNekoToolbarNewDoc")
+    static let toolbarOpenFile = Notification.Name("KamiNekoToolbarOpenFile")
+    static let toolbarSaveSession = Notification.Name("KamiNekoToolbarSaveSession")
+    static let toolbarToggleTheme = Notification.Name("KamiNekoToolbarToggleTheme")
+    static let toolbarNewTab = Notification.Name("KamiNekoToolbarNewTab")
+    static let toolbarShowAllTabs = Notification.Name("KamiNekoToolbarShowAllTabs")
+    static let documentTitleChanged = Notification.Name("KamiNekoDocumentTitleChanged")
 }
 
 

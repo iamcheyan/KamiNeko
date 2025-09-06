@@ -18,22 +18,9 @@ struct SettingsView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .padding(.top, 8)
 
+            // 外观组：保留语言，去掉主题
             GroupBox(label: Text(Localizer.t("appearance.section")).font(.headline)) {
                 Grid(alignment: .trailingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 12) {
-                    GridRow {
-                        Text(Localizer.t("appearance.theme"))
-                            .frame(minWidth: 80, alignment: .trailing)
-                        Picker("", selection: $preferredSchemeRaw) {
-                            Text(Localizer.t("theme.system")).tag("system")
-                            Text(Localizer.t("theme.light")).tag("light")
-                            Text(Localizer.t("theme.dark")).tag("dark")
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: preferredSchemeRaw) {
-                            NotificationCenter.default.post(name: .appAppearanceChanged, object: nil)
-                            NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
-                        }
-                    }
                     GridRow {
                         Text(Localizer.t("appearance.language"))
                             .frame(minWidth: 80, alignment: .trailing)
@@ -84,10 +71,11 @@ struct SettingsView: View {
                     GridRow {
                         Text(Localizer.t("editor.fontName"))
                             .frame(minWidth: 80, alignment: .trailing)
-                        TextField("SFMono-Regular", text: $editorFontName)
-                            .textFieldStyle(.roundedBorder)
+                        FontPicker(selectedFontName: $editorFontName)
                             .frame(minWidth: 260)
-                            .onSubmit { NotificationCenter.default.post(name: .appPreferencesChanged, object: nil) }
+                            .onChange(of: editorFontName) {
+                                NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
+                            }
                     }
                     GridRow {
                         Text(Localizer.t("editor.fontSize"))
@@ -134,7 +122,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(20)
-        .frame(minWidth: 600)
+        .frame(minWidth: 480)
     }
 
     private func applyLanguageChange(_ lang: String) {
@@ -159,6 +147,41 @@ struct SettingsView: View {
 
 extension Notification.Name {
     static let appPreferencesChanged = Notification.Name("KamiNekoPreferencesChanged")
+}
+
+// 系统字体选择器（基于 NSFontPanel）
+struct FontPicker: NSViewRepresentable {
+    @Binding var selectedFontName: String
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: selectedFontName, target: context.coordinator, action: #selector(Coordinator.pick))
+        button.bezelStyle = .rounded
+        return button
+    }
+
+    func updateNSView(_ nsView: NSButton, context: Context) {
+        nsView.title = selectedFontName
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(owner: self) }
+
+    final class Coordinator: NSObject, NSFontChanging {
+        let owner: FontPicker
+        init(owner: FontPicker) { self.owner = owner }
+
+        @objc func pick() {
+            let panel = NSFontPanel.shared
+            panel.setPanelFont(NSFont(name: owner.selectedFontName, size: 14) ?? NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), isMultiple: false)
+            panel.makeKeyAndOrderFront(nil)
+            NSFontManager.shared.target = self
+        }
+
+        func changeFont(_ sender: NSFontManager?) {
+            guard let fontManager = sender else { return }
+            let font = fontManager.convert(NSFont.systemFont(ofSize: 14))
+            owner.selectedFontName = font.fontName
+        }
+    }
 }
 
 

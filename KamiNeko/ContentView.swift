@@ -432,6 +432,7 @@ struct ContentView: View {
         guard let base = baseWindow else { return }
         let controller = NSHostingController(rootView: ContentView(initialDocument: doc))
         let newWindow = NSWindow(contentViewController: controller)
+        newWindow.identifier = NSUserInterfaceItemIdentifier("KamiNeko.ContentWindow")
         if let doc = doc {
             let fallback = doc.fileURL?.lastPathComponent ?? doc.title
             let display = computeDisplayTitle(from: doc.content, fallback: fallback)

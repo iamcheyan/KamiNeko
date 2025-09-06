@@ -22,11 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.windows.forEach { window in
             window.tabbingMode = .preferred
         }
-        if let window = NSApp.windows.first {
+        if let window = NSApp.windows.first, window.identifier?.rawValue == "KamiNeko.ContentWindow" {
             BrowserToolbarController.shared.attach(to: window)
         }
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { note in
-            if let window = note.object as? NSWindow {
+            if let window = note.object as? NSWindow, window.identifier?.rawValue == "KamiNeko.ContentWindow" {
                 BrowserToolbarController.shared.attach(to: window)
             }
         }

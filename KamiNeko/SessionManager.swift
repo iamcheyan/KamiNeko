@@ -15,6 +15,13 @@ final class SessionManager {
     private let fileManager = FileManager.default
     private var autosaveTimer: Timer?
 
+    // Fan-out queue for session restoration across system tabs
+    // First ContentView will load sessions here and create (count-1) tabs.
+    // Subsequent ContentViews will pop from this queue to get their document.
+    private(set) var restoredDocsQueue: [DocumentModel] = []
+    private var restoredDocsNextIndex: Int = 0
+    private var hasPlannedFanout: Bool = false
+
     private var appSupportURL: URL {
         let url = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return url.appendingPathComponent("KamiNeko", isDirectory: true)
@@ -45,7 +52,7 @@ final class SessionManager {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         if let data = try? encoder.encode(sessions) {
-            try? data.write(to: sessionFileURL)
+            try? data.write (to: sessionFileURL)
         }
     }
 
@@ -55,9 +62,14 @@ final class SessionManager {
         var tabSessions: [DocumentSession] = []
         
         // Collect all documents from each store (each tab)
-        for obj in DocumentStore.allStores.allObjects {
-            guard let store = obj as? DocumentStore else { continue }
+        for store in DocumentStore.allStores.allObjects {
             for doc in store.documents {
+                // 跳过空白未命名文档（只包含空白字符）
+                if doc.fileURL == nil {
+                    if doc.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        continue
+                    }
+                }
                 let tempURL = tempContentURL(for: doc.id)
                 // Always write snapshot for recovery (both untitled and named)
                 if doc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
@@ -98,10 +110,48 @@ final class SessionManager {
         return docs
     }
 
+    // MARK: - Restoration fan-out helpers
+
+    func prepareRestoredDocsQueueIfNeeded() -> [DocumentModel] {
+        if restoredDocsQueue.isEmpty {
+            restoredDocsQueue = restoreSession()
+            restoredDocsNextIndex = 0
+            hasPlannedFanout = false
+        }
+        return restoredDocsQueue
+    }
+
+    func takeNextRestoredDoc() -> DocumentModel? {
+        guard restoredDocsNextIndex < restoredDocsQueue.count else { return nil }
+        let doc = restoredDocsQueue[restoredDocsNextIndex]
+        restoredDocsNextIndex += 1
+        return doc
+    }
+
+    func markFanoutPlanned() { hasPlannedFanout = true }
+    func fanoutAlreadyPlanned() -> Bool { hasPlannedFanout }
+
+    func clearQueueIfDistributed() {
+        if restoredDocsNextIndex >= restoredDocsQueue.count {
+            restoredDocsQueue.removeAll()
+            restoredDocsNextIndex = 0
+            hasPlannedFanout = false
+        }
+    }
+
     func startAutoSave(store: DocumentStore) {
         stopAutoSave()
         autosaveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
+            // 优先写回文件夹中文件型文档
+            for s in DocumentStore.allStores.allObjects {
+                for d in s.documents {
+                    if let url = d.fileURL, d.isDirty {
+                        try? d.content.data(using: .utf8)?.write(to: url)
+                        d.isDirty = false
+                    }
+                }
+            }
             self.saveAllStores()
         }
         RunLoop.main.add(autosaveTimer!, forMode: .common)

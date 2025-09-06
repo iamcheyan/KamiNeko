@@ -10,10 +10,17 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    // When provided, this document will be used to initialize the store
+    private var initialDocument: DocumentModel? = nil
+
+    init(initialDocument: DocumentModel? = nil) {
+        self.initialDocument = initialDocument
+    }
     @StateObject private var store = DocumentStore()
     @State private var isShowingOpenPanel = false
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
     // Using system window tabs; no custom tab height needed
+    @State private var tabCount: Int = 1
 
     private var preferredScheme: ColorScheme? {
         switch preferredSchemeRaw {
@@ -24,8 +31,148 @@ struct ContentView: View {
     }
 
     var body: some View {
+        applyGlobalHandlers(rootView())
+    }
+
+    // 将全局事件与修饰器集中，降低 body 表达式复杂度
+    private func applyGlobalHandlers(_ base: AnyView) -> AnyView {
+        var view = base
+        view = AnyView(view.onAppear {
+            if store.documents.isEmpty {
+                // Check if this is app startup or a new tab
+                let allStores = DocumentStore.allStores.allObjects
+                let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { $0.documents.isEmpty }
+                
+                if isAppStartup {
+                    // 优先使用工作目录模式：按目录中文件构建标签；若未设置目录，则提示选择
+                    if let _ = WorkingDirectoryManager.shared.directoryURL ?? WorkingDirectoryManager.shared.promptUserToChooseDirectory() {
+                        var files = WorkingDirectoryManager.shared.listFiles()
+                        // 启动时先清理空白文件（仅空白字符），并从加载列表中过滤掉
+                        files = files.filter { url in
+                            if let content = try? String(contentsOf: url), content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                try? FileManager.default.removeItem(at: url)
+                                return false
+                            }
+                            return true
+                        }
+                        if files.isEmpty {
+                            // 目录为空：创建第一个文件
+                            if let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
+                                let doc = makeDoc(for: newURL)
+                                store.documents = [doc]
+                                store.selectedDocumentID = doc.id
+                            } else if let doc = initialDocument {
+                                store.documents = [doc]
+                                store.selectedDocumentID = doc.id
+                            } else {
+                                store.newUntitled()
+                            }
+                        } else {
+                            // 目录已有文件：首个在当前标签，其余扇出
+                            let firstURL = files[0]
+                            let firstDoc = makeDoc(for: firstURL)
+                            store.documents = [firstDoc]
+                            store.selectedDocumentID = firstDoc.id
+                            if files.count > 1 {
+                                let rest = Array(files.dropFirst()).map { makeDoc(for: $0) }
+                                fanOutRestoredDocs(rest)
+                            }
+                        }
+                    } else {
+                        // 无目录：退回到会话恢复
+                        let restored = SessionManager.shared.restoreSession()
+                        if restored.isEmpty {
+                            if let doc = initialDocument {
+                                store.documents = [doc]
+                                store.selectedDocumentID = doc.id
+                            } else {
+                                store.newUntitled()
+                            }
+                        } else {
+                            let first = restored[0]
+                            store.documents = [first]
+                            store.selectedDocumentID = first.id
+                            if restored.count > 1 {
+                                fanOutRestoredDocs(Array(restored.dropFirst()))
+                            }
+                        }
+                    }
+                } else {
+                    // New tab: if initial doc provided, use it; otherwise create empty
+                    if let doc = initialDocument {
+                        store.documents = [doc]
+                        store.selectedDocumentID = doc.id
+                    } else {
+                        if WorkingDirectoryManager.shared.directoryURL != nil, let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
+                            let doc = makeDoc(for: newURL)
+                            store.documents = [doc]
+                            store.selectedDocumentID = doc.id
+                        } else {
+                            store.newUntitled()
+                        }
+                    }
+                }
+            } else if store.selectedDocument() == nil {
+                store.newUntitled()
+            }
+            SessionManager.shared.startAutoSave(store: store)
+            updateWindowTitle()
+            applyWindowAppearance()
+            updateTabCount()
+        })
+        view = AnyView(view.onDisappear { SessionManager.shared.stopAutoSave() })
+        view = AnyView(view.preferredColorScheme(preferredScheme))
+        view = AnyView(view.onChange(of: preferredSchemeRaw) { applyWindowAppearance() })
+        view = AnyView(view.onChange(of: store.selectedDocumentID) {
+            updateWindowTitle()
+            if let title = store.selectedDocument()?.title {
+                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": title])
+            }
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appZoomIn)) { _ in store.adjustFontSize(delta: 1) })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appZoomOut)) { _ in store.adjustFontSize(delta: -1) })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appZoomReset)) { _ in
+            if let doc = store.selectedDocument() { doc.fontSize = 14 }
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentRenameRequested)) { note in
+            if let name = note.userInfo?["title"] as? String, let doc = store.selectedDocument() {
+                doc.title = name
+                updateWindowTitle()
+                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": name])
+            }
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { _ in
+            if let tv = (NSApp.keyWindow?.contentView?.subviews.compactMap { $0 as? NSScrollView }.first?.documentView as? NSTextView), let container = tv.textContainer, let sv = tv.enclosingScrollView {
+                container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
+            }
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarUndo)) { _ in performUndo() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarRedo)) { _ in performRedo() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in store.newUntitled() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarSaveSession)) { _ in SessionManager.shared.saveAllStores() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in toggleAppearance() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewTab)) { _ in newTab() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarShowAllTabs)) { _ in showAllTabs() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentTitleChanged)) { _ in syncRenameIfNeeded() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
+        return view
+    }
+
+    private func rootView() -> AnyView {
+        AnyView(
+            ZStack(alignment: .bottom) {
+                editorArea()
+                bottomTabCounter()
+            }
+        )
+    }
+
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private func editorArea() -> some View {
         VStack(spacing: 0) {
-            // Editor area
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)
                     .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
@@ -45,90 +192,21 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear {
-            if store.documents.isEmpty {
-                // Check if this is app startup or a new tab
-                let allStores = DocumentStore.allStores.allObjects.compactMap { $0 as DocumentStore }
-                let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { $0.documents.isEmpty }
-                
-                if isAppStartup {
-                    // App startup: restore documents and fan out to multiple system tabs
-                    let restored = SessionManager.shared.restoreSession()
-                    if restored.isEmpty {
-                        store.newUntitled()
-                    } else {
-                        // Assign the first document to this tab/store
-                        let firstDoc = restored[0]
-                        store.documents = [firstDoc]
-                        store.selectedDocumentID = firstDoc.id
+    }
 
-                        // Create additional system tabs for remaining documents
-                        if restored.count > 1 {
-                            DispatchQueue.main.async {
-                                for _ in 1..<restored.count {
-                                    createSystemTabWindow()
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // New tab: check if there's a document waiting to be assigned
-                    let restored = SessionManager.shared.restoreSession()
-                    let assignedCount = allStores.filter { !$0.documents.isEmpty }.count
-                    
-                    if assignedCount < restored.count {
-                        // There's still a document to assign to this tab
-                        let docToAssign = restored[assignedCount]
-                        store.documents = [docToAssign]
-                        store.selectedDocumentID = docToAssign.id
-                    } else {
-                        // All restored documents are assigned, create new empty document
-                        store.newUntitled()
-                    }
-                }
-            } else if store.selectedDocument() == nil {
-                store.newUntitled()
-            }
-            SessionManager.shared.startAutoSave(store: store)
-            updateWindowTitle()
-            applyWindowAppearance()
+    @ViewBuilder
+    private func bottomTabCounter() -> some View {
+        HStack {
+            Text("已打开标签：\(tabCount)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .onDisappear { SessionManager.shared.stopAutoSave() }
-        .preferredColorScheme(preferredScheme)
-        .onChange(of: preferredSchemeRaw) { applyWindowAppearance() }
-        .onChange(of: store.selectedDocumentID) {
-            updateWindowTitle()
-            if let title = store.selectedDocument()?.title {
-                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": title])
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .appZoomIn)) { _ in store.adjustFontSize(delta: 1) }
-        .onReceive(NotificationCenter.default.publisher(for: .appZoomOut)) { _ in store.adjustFontSize(delta: -1) }
-        .onReceive(NotificationCenter.default.publisher(for: .appZoomReset)) { _ in
-            if let doc = store.selectedDocument() { doc.fontSize = 14 }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .documentRenameRequested)) { note in
-            if let name = note.userInfo?["title"] as? String, let doc = store.selectedDocument() {
-                doc.title = name
-                updateWindowTitle()
-                NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": name])
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { _ in
-            // Keep container width updated after scroll/resize
-            if let tv = (NSApp.keyWindow?.contentView?.subviews.compactMap { $0 as? NSScrollView }.first?.documentView as? NSTextView), let container = tv.textContainer, let sv = tv.enclosingScrollView {
-                container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
-            }
-        }
-        // Bind Toolbar actions to app behaviors
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarUndo)) { _ in performUndo() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarRedo)) { _ in performRedo() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in store.newUntitled() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarSaveSession)) { _ in SessionManager.shared.saveAllStores() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in toggleAppearance() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarNewTab)) { _ in newTab() }
-        .onReceive(NotificationCenter.default.publisher(for: .toolbarShowAllTabs)) { _ in showAllTabs() }
+        .padding(.bottom, 6)
+        .allowsHitTesting(false)
     }
 
     private func openFile() {
@@ -183,28 +261,88 @@ struct ContentView: View {
 
     private func updateWindowTitle() {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
-        window.title = doc.title
+        if let url = doc.fileURL {
+            window.title = url.path
+            window.representedURL = url
+        } else {
+            window.title = doc.title
+            window.representedURL = nil
+        }
     }
 
     private func performUndo() { NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil) }
     private func performRedo() { NSApp.sendAction(#selector(UndoManager.redo), to: nil, from: nil) }
     private func newTab() { 
-        // Create a new system tab hosting a fresh ContentView
-        createSystemTabWindow()
+        // 基于当前激活窗口创建系统标签
+        createSystemTabWindow(with: nil, baseWindow: NSApp.keyWindow)
+        updateTabCount()
     }
     private func showAllTabs() {
         if let window = NSApp.keyWindow { _ = window.perform(NSSelectorFromString("toggleTabOverview:"), with: nil) }
     }
 
-    private func createSystemTabWindow() {
-        let controller = NSHostingController(rootView: ContentView())
+    private func createSystemTabWindow(with doc: DocumentModel? = nil, baseWindow: NSWindow? = NSApp.keyWindow) {
+        guard let base = baseWindow else { return }
+        let controller = NSHostingController(rootView: ContentView(initialDocument: doc))
         let newWindow = NSWindow(contentViewController: controller)
-        newWindow.title = "Untitled"
-        if let key = NSApp.keyWindow {
-            key.addTabbedWindow(newWindow, ordered: .above)
+        if let url = doc?.fileURL {
+            newWindow.title = url.path
+            newWindow.representedURL = url
         } else {
-            newWindow.makeKeyAndOrderFront(nil)
+            newWindow.title = doc?.title ?? "Untitled"
+            newWindow.representedURL = nil
         }
+        newWindow.tabbingMode = .preferred
+        // 先附加工具栏，避免 nil toolbar
+        BrowserToolbarController.shared.attach(to: newWindow)
+        base.addTabbedWindow(newWindow, ordered: .above)
+        newWindow.makeKeyAndOrderFront(nil)
+        updateTabCount()
+    }
+
+    // 在首个窗口成为 key 后，将其余文档扇出为系统标签；若暂未有 keyWindow，则重试数次
+    private func fanOutRestoredDocs(_ docs: [DocumentModel], attempt: Int = 0) {
+        if let base = NSApp.keyWindow {
+            for doc in docs {
+                createSystemTabWindow(with: doc, baseWindow: base)
+            }
+            return
+        }
+        if attempt >= 30 { // 最长约 1.5s
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            fanOutRestoredDocs(docs, attempt: attempt + 1)
+        }
+    }
+
+    private func updateTabCount() {
+        if let key = NSApp.keyWindow, let tabs = key.tabbedWindows {
+            tabCount = max(1, tabs.count)
+        } else {
+            // 回退到全局 store 数量（跨窗口合计）
+            let count = DocumentStore.allStores.allObjects.count
+            tabCount = max(1, count)
+        }
+    }
+
+    private func syncRenameIfNeeded() {
+        guard let doc = store.selectedDocument() else { return }
+        // 仅处理文件型文档：把标题作为新文件名
+        if let url = doc.fileURL {
+            do {
+                let newURL = try WorkingDirectoryManager.shared.renameFile(at: url, to: doc.title)
+                doc.fileURL = newURL
+            } catch {
+                // 忽略重命名失败
+            }
+        }
+    }
+
+    private func makeDoc(for url: URL) -> DocumentModel {
+        let title = url.deletingPathExtension().lastPathComponent
+        let content = (try? String(contentsOf: url)) ?? ""
+        return DocumentModel(title: title, content: content, fileURL: url, isDirty: false)
     }
 }
 

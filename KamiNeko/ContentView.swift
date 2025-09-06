@@ -253,7 +253,7 @@ struct ContentView: View {
             } else {
                 ZStack {
                     Color(NSColor.textBackgroundColor)
-                    Text("新建文档或打开文件")
+                    Text(Localizer.t("content.placeholder"))
                         .foregroundColor(.secondary)
                 }
             }
@@ -263,7 +263,7 @@ struct ContentView: View {
     @ViewBuilder
     private func bottomTabCounter() -> some View {
         HStack {
-            Text("已打开标签：\(tabCount)")
+            Text("\(Localizer.t("tabs.count"))\(tabCount)")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 10)

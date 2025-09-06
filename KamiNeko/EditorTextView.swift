@@ -163,13 +163,27 @@ final class ZoomableTextView: NSTextView {
         return f.ascender - f.descender + f.leading
     }
 
+    private func isDarkAppearance() -> Bool {
+        return effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    private func updateHighlightColor() {
+        let alpha: CGFloat = isDarkAppearance() ? 0.12 : 0.06
+        currentLineLayer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(alpha).cgColor
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         wantsLayer = true
-        currentLineLayer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.10).cgColor
+        updateHighlightColor()
         currentLineLayer.cornerRadius = 3
         layer?.addSublayer(currentLineLayer)
         updateCurrentLineHighlight()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateHighlightColor()
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -276,7 +290,8 @@ final class LineNumberRulerView: NSRulerView {
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
 
         let context = NSGraphicsContext.current?.cgContext
-        context?.setFillColor(NSColor.secondaryLabelColor.withAlphaComponent(0.08).cgColor)
+        let isDark = (self.window?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        context?.setFillColor(NSColor.secondaryLabelColor.withAlphaComponent(isDark ? 0.10 : 0.06).cgColor)
         context?.fill(rect)
         // Right separator line to visually split ruler and content
         let sepX = self.bounds.maxX - 0.5

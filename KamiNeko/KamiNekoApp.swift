@@ -15,5 +15,7 @@ struct KamiNekoApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.automatic)
+        .defaultSize(width: 980, height: 700)
     }
 }

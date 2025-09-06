@@ -13,6 +13,7 @@ struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @State private var isShowingOpenPanel = false
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
+    private let tabHeight: CGFloat = 28
 
     private var preferredScheme: ColorScheme? {
         switch preferredSchemeRaw {
@@ -24,33 +25,6 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Tab bar
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(store.documents) { doc in
-                        HStack(spacing: 6) {
-                            Text(doc.title)
-                                .foregroundColor(store.selectedDocumentID == doc.id ? .white : .primary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(store.selectedDocumentID == doc.id ? Color.accentColor : Color.clear)
-                                .cornerRadius(6)
-                                .onTapGesture { store.select(doc) }
-                            Button(action: { store.close(doc) }) {
-                                Image(systemName: "xmark.circle.fill")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 4)
-                        .padding(.leading, 4)
-                    }
-                    Button(action: { store.newUntitled() }) {
-                        Image(systemName: "plus")
-                    }.buttonStyle(.plain)
-                }
-                .padding(6)
-            }
-            Divider()
             // Editor area
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)

@@ -137,7 +137,7 @@ final class LineNumberRulerView: NSRulerView {
         self.textView = textView
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         self.clientView = textView
-        self.ruleThickness = 40
+        self.ruleThickness = 34
     }
 
     required init(coder: NSCoder) {

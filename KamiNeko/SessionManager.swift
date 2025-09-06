@@ -54,17 +54,17 @@ final class SessionManager {
         prepareDirectories()
         var tabSessions: [DocumentSession] = []
         
-        // Collect the selected document from each store (each tab)
+        // Collect all documents from each store (each tab)
         for obj in DocumentStore.allStores.allObjects {
             guard let store = obj as? DocumentStore else { continue }
-            if let selectedDoc = store.selectedDocument() {
-                let tempURL = tempContentURL(for: selectedDoc.id)
+            for doc in store.documents {
+                let tempURL = tempContentURL(for: doc.id)
                 // Always write snapshot for recovery (both untitled and named)
-                if selectedDoc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
-                    try? selectedDoc.content.data(using: .utf8)?.write(to: tempURL)
-                    selectedDoc.isDirty = false
+                if doc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
+                    try? doc.content.data(using: .utf8)?.write(to: tempURL)
+                    doc.isDirty = false
                 }
-                tabSessions.append(selectedDoc.toSession(tempContentPath: tempURL.path))
+                tabSessions.append(doc.toSession(tempContentPath: tempURL.path))
             }
         }
         

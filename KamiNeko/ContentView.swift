@@ -13,7 +13,7 @@ struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @State private var isShowingOpenPanel = false
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
-    private let tabHeight: CGFloat = 28
+    // Using system window tabs; no custom tab height needed
 
     private var preferredScheme: ColorScheme? {
         switch preferredSchemeRaw {
@@ -25,44 +25,6 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Document tabs
-            if store.documents.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 0) {
-                        ForEach(store.documents) { doc in
-                            Button(action: {
-                                store.select(doc)
-                            }) {
-                                HStack {
-                                    Text(doc.title)
-                                        .lineLimit(1)
-                                        .font(.system(size: 12))
-                                    Button(action: {
-                                        store.close(doc)
-                                    }) {
-                                        Image(systemName: "xmark")
-                                            .font(.system(size: 8))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    doc.id == store.selectedDocumentID ? 
-                                    Color.accentColor.opacity(0.2) : 
-                                    Color.clear
-                                )
-                                .cornerRadius(4)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                }
-                .frame(height: tabHeight)
-                .background(Color(NSColor.controlBackgroundColor))
-            }
-            
             // Editor area
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)
@@ -90,14 +52,24 @@ struct ContentView: View {
                 let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { $0.documents.isEmpty }
                 
                 if isAppStartup {
-                    // App startup: restore all documents in one tab
+                    // App startup: restore documents and fan out to multiple system tabs
                     let restored = SessionManager.shared.restoreSession()
                     if restored.isEmpty {
                         store.newUntitled()
                     } else {
-                        // Restore all documents to this store
-                        store.documents = restored
-                        store.selectedDocumentID = restored.first?.id
+                        // Assign the first document to this tab/store
+                        let firstDoc = restored[0]
+                        store.documents = [firstDoc]
+                        store.selectedDocumentID = firstDoc.id
+
+                        // Create additional system tabs for remaining documents
+                        if restored.count > 1 {
+                            DispatchQueue.main.async {
+                                for _ in 1..<restored.count {
+                                    createSystemTabWindow()
+                                }
+                            }
+                        }
                     }
                 } else {
                     // New tab: check if there's a document waiting to be assigned
@@ -217,12 +189,22 @@ struct ContentView: View {
     private func performUndo() { NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil) }
     private func performRedo() { NSApp.sendAction(#selector(UndoManager.redo), to: nil, from: nil) }
     private func newTab() { 
-        // Since we now manage multiple documents in one window,
-        // newTab just creates a new document in the current store
-        store.newUntitled()
+        // Create a new system tab hosting a fresh ContentView
+        createSystemTabWindow()
     }
     private func showAllTabs() {
         if let window = NSApp.keyWindow { _ = window.perform(NSSelectorFromString("toggleTabOverview:"), with: nil) }
+    }
+
+    private func createSystemTabWindow() {
+        let controller = NSHostingController(rootView: ContentView())
+        let newWindow = NSWindow(contentViewController: controller)
+        newWindow.title = "Untitled"
+        if let key = NSApp.keyWindow {
+            key.addTabbedWindow(newWindow, ordered: .above)
+        } else {
+            newWindow.makeKeyAndOrderFront(nil)
+        }
     }
 }
 

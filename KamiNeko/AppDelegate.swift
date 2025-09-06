@@ -13,6 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldRestoreWindows(_ app: NSApplication) -> Bool { false }
     @available(macOS 13.0, *)
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { false }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // 在任何窗口开始关闭之前标记正在退出，避免 willClose 中误删文件
+        SessionManager.shared.isTerminating = true
+        return .terminateNow
+    }
     func applicationWillTerminate(_ notification: Notification) {
         SessionManager.shared.isTerminating = true
     }

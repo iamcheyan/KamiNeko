@@ -111,8 +111,9 @@ struct EditorTextView: NSViewRepresentable {
 final class ZoomableTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
     override func scrollWheel(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) {
-            let delta = event.scrollingDeltaY
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command) {
+            let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY
             let step: CGFloat = delta > 0 ? 1 : -1
             let current = self.font?.pointSize ?? 14
             let newSize = max(8, min(64, current + step))
@@ -181,6 +182,8 @@ final class LineNumberRulerView: NSRulerView {
 
 extension Notification.Name {
     static let editorFontSizeChanged = Notification.Name("EditorFontSizeChanged")
+    static let appZoomIn = Notification.Name("KamiNekoZoomIn")
+    static let appZoomOut = Notification.Name("KamiNekoZoomOut")
 }
 
 

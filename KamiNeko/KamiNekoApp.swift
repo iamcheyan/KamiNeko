@@ -17,5 +17,18 @@ struct KamiNekoApp: App {
         }
         .windowStyle(.automatic)
         .defaultSize(width: 980, height: 700)
+        .commands {
+            CommandMenu("字体") {
+                Button("放大") {
+                    NotificationCenter.default.post(name: .appZoomIn, object: nil)
+                }
+                .keyboardShortcut("+", modifiers: [.command])
+
+                Button("缩小") {
+                    NotificationCenter.default.post(name: .appZoomOut, object: nil)
+                }
+                .keyboardShortcut("-", modifiers: [.command])
+            }
+        }
     }
 }

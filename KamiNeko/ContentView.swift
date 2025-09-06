@@ -71,6 +71,8 @@ struct ContentView: View {
         .onAppear { applyWindowAppearance() }
         .onChange(of: preferredSchemeRaw) { _ in applyWindowAppearance() }
         .onChange(of: store.selectedDocumentID) { _ in updateWindowTitle() }
+        .onReceive(NotificationCenter.default.publisher(for: .appZoomIn)) { _ in store.adjustFontSize(delta: 1) }
+        .onReceive(NotificationCenter.default.publisher(for: .appZoomOut)) { _ in store.adjustFontSize(delta: -1) }
     }
 
     private func openFile() {

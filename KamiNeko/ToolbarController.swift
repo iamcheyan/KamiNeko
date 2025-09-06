@@ -27,6 +27,13 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     private var titleLabel: NSTextField?
     private var titleEditField: NSTextField?
     private var zoomSlider: NSSlider?
+    private func currentThemeSymbolName() -> String {
+        // 浅色显示太阳，深色显示月亮
+        switch NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) {
+        case .some(.darkAqua): return "moon"
+        default: return "sun.max"
+        }
+    }
 
     func attach(to window: NSWindow) {
         let toolbar = NSToolbar(identifier: toolbarIdentifier)
@@ -47,11 +54,11 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     // MARK: - Toolbar delegate
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [undoId, redoId, newId, openId, saveId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, newTabId, allTabsId]
+        [newId, openId, saveId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, allTabsId]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [undoId, redoId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, newTabId, allTabsId]
+        [.flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, allTabsId]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -95,7 +102,12 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
         case saveId:
             return makeButtonItem(id: itemIdentifier, system: "tray.and.arrow.down", action: #selector(saveFile))
         case themeId:
-            return makeButtonItem(id: itemIdentifier, system: "moon", action: #selector(toggleTheme))
+            let button = NSButton(image: NSImage(systemSymbolName: currentThemeSymbolName(), accessibilityDescription: nil)!, target: self, action: #selector(toggleTheme))
+            button.bezelStyle = .texturedRounded
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.view = button
+            NotificationCenter.default.addObserver(self, selector: #selector(appearanceChanged), name: .appAppearanceChanged, object: nil)
+            return item
         case zoomId:
             let slider = NSSlider(value: 14, minValue: 8, maxValue: 64, target: self, action: #selector(zoomSliderChanged(_:)))
             slider.isContinuous = true
@@ -109,7 +121,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
             NotificationCenter.default.addObserver(self, selector: #selector(fontSizeChanged(_:)), name: .editorFontSizeChanged, object: nil)
             return item
         case newTabId:
-            return makeButtonItem(id: itemIdentifier, system: "plus", action: #selector(newTab))
+            return nil
         case allTabsId:
             return makeButtonItem(id: itemIdentifier, system: "square.grid.2x2", action: #selector(showAllTabs))
         default:
@@ -132,7 +144,15 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     @objc private func newDoc() { NotificationCenter.default.post(name: .toolbarNewDoc, object: nil) }
     @objc private func openFile() { NotificationCenter.default.post(name: .toolbarOpenFile, object: nil) }
     @objc private func saveFile() { NotificationCenter.default.post(name: .appSaveFile, object: nil) }
-    @objc private func toggleTheme() { NotificationCenter.default.post(name: .toolbarToggleTheme, object: nil) }
+    @objc private func toggleTheme() {
+        NotificationCenter.default.post(name: .toolbarToggleTheme, object: nil)
+        NotificationCenter.default.post(name: .appAppearanceChanged, object: nil)
+    }
+    @objc private func appearanceChanged() {
+        if let item = (NSApp.keyWindow?.toolbar?.items.first { $0.itemIdentifier == themeId }), let button = item.view as? NSButton {
+            button.image = NSImage(systemSymbolName: currentThemeSymbolName(), accessibilityDescription: nil)
+        }
+    }
     @objc private func newTab() { NotificationCenter.default.post(name: .toolbarNewTab, object: nil) }
     @objc private func showAllTabs() { NotificationCenter.default.post(name: .toolbarShowAllTabs, object: nil) }
     @objc private func zoomSliderChanged(_ sender: NSSlider) {
@@ -147,7 +167,10 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     }
 
     private func currentTitle() -> String {
-        (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")!
+        if let url = NSApp.keyWindow?.representedURL {
+            return url.path
+        }
+        return (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")!
     }
 
     @objc private func fontSizeChanged(_ note: Notification) {

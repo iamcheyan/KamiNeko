@@ -274,6 +274,7 @@ extension Notification.Name {
     static let appZoomOut = Notification.Name("KamiNekoZoomOut")
     static let appZoomReset = Notification.Name("KamiNekoZoomReset")
     static let appSaveFile = Notification.Name("KamiNekoSaveFile")
+    static let appAppearanceChanged = Notification.Name("KamiNekoAppearanceChanged")
     static let toolbarUndo = Notification.Name("KamiNekoToolbarUndo")
     static let toolbarRedo = Notification.Name("KamiNekoToolbarRedo")
     static let toolbarBack = Notification.Name("KamiNekoToolbarBack")

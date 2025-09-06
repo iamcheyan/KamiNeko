@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
@@ -26,6 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 BrowserToolbarController.shared.attach(to: window)
             }
         }
+    }
+
+    // 处理系统标签栏的“+”按钮动作
+    @objc func newWindowForTab(_ sender: Any?) {
+        guard let base = NSApp.keyWindow else { return }
+        let controller = NSHostingController(rootView: ContentView())
+        let newWindow = NSWindow(contentViewController: controller)
+        newWindow.tabbingMode = NSWindow.TabbingMode.preferred
+        BrowserToolbarController.shared.attach(to: newWindow)
+        base.addTabbedWindow(newWindow, ordered: .above)
+        newWindow.makeKeyAndOrderFront(nil as Any?)
     }
 }
 

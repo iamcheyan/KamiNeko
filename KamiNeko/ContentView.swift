@@ -156,7 +156,11 @@ struct ContentView: View {
             SessionManager.shared.saveFileBackedDocumentsToDisk()
             SessionManager.shared.saveAllStores()
         })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in toggleAppearance() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in
+            toggleAppearance()
+            NotificationCenter.default.post(name: .appAppearanceChanged, object: nil)
+        })
+        // 仍保留 .toolbarNewTab 的响应以兼容未来入口
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewTab)) { _ in newTab() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarShowAllTabs)) { _ in showAllTabs() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentTitleChanged)) { _ in syncRenameIfNeeded() })
@@ -275,12 +279,14 @@ struct ContentView: View {
     private func updateWindowTitle() {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first, let doc = store.selectedDocument() else { return }
         if let url = doc.fileURL {
-            // tab 显示文件名，原生标题栏点击可见完整路径
+            // tab 显示文件名，但中间标题显示完整路径
             window.title = url.lastPathComponent
             window.representedURL = url
+            NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": url.path])
         } else {
             window.title = doc.title
             window.representedURL = nil
+            NotificationCenter.default.post(name: .documentTitleChanged, object: nil, userInfo: ["title": doc.title])
         }
     }
 

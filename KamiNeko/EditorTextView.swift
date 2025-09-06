@@ -39,6 +39,7 @@ struct EditorTextView: NSViewRepresentable {
         if let container = textView.textContainer {
             container.widthTracksTextView = true
             container.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
+            container.lineFragmentPadding = 5
         }
 
         // Attach document view first
@@ -154,6 +155,13 @@ final class LineNumberRulerView: NSRulerView {
         let context = NSGraphicsContext.current?.cgContext
         context?.setFillColor(NSColor.secondaryLabelColor.withAlphaComponent(0.08).cgColor)
         context?.fill(rect)
+        // Right separator line to visually split ruler and content
+        let sepX = self.bounds.maxX - 0.5
+        context?.setStrokeColor(NSColor.separatorColor.cgColor)
+        context?.setLineWidth(1)
+        context?.move(to: CGPoint(x: sepX, y: rect.minY))
+        context?.addLine(to: CGPoint(x: sepX, y: rect.maxY))
+        context?.strokePath()
 
         var lineNumber = 1
         let textStorageString = textView.string as NSString

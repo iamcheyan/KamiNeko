@@ -46,12 +46,17 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            let restored = SessionManager.shared.restoreSession()
-            if restored.isEmpty {
+            // If this is the first window (no documents yet), restore session; otherwise create a fresh empty doc
+            if store.documents.isEmpty {
+                let restored = SessionManager.shared.restoreSession()
+                if restored.isEmpty {
+                    store.newUntitled()
+                } else {
+                    store.documents = restored
+                    store.selectedDocumentID = restored.first?.id
+                }
+            } else if store.selectedDocument() == nil {
                 store.newUntitled()
-            } else {
-                store.documents = restored
-                store.selectedDocumentID = restored.first?.id
             }
             SessionManager.shared.startAutoSave(store: store)
             updateWindowTitle()

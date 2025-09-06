@@ -94,6 +94,11 @@ enum Localizer {
         "menu.showAllTabs": ["zh-Hans": "显示所有标签", "en": "Show All Tabs", "ja": "すべてのタブを表示"],
         "menu.showTabBar": ["zh-Hans": "显示标签栏", "en": "Show Tab Bar", "ja": "タブバーを表示"],
         "menu.hideTabBar": ["zh-Hans": "隐藏标签栏", "en": "Hide Tab Bar", "ja": "タブバーを隠す"],
+
+        // File menu common items
+        "menu.newWindow": ["zh-Hans": "新建窗口", "en": "New Window", "ja": "新規ウインドウ"],
+        "menu.closeWindow": ["zh-Hans": "关闭窗口", "en": "Close Window", "ja": "ウインドウを閉じる"],
+        "menu.closeTabFile": ["zh-Hans": "关闭标签", "en": "Close Tab", "ja": "タブを閉じる"],
     ]
 }
 

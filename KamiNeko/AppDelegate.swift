@@ -102,13 +102,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             // 特别处理 Window 菜单中的标签相关项
-            if let submenu = item.submenu { localizeWindowMenu(submenu) }
+            if let submenu = item.submenu {
+                localizeWindowMenu(submenu)
+                localizeCommonMenuItemsRecursively(submenu)
+            }
         }
         // 直接设置系统引用的菜单标题以确保刷新
         if let winMenu = NSApp.windowsMenu { winMenu.title = Localizer.t("menu.window") }
         if let help = NSApp.helpMenu { help.title = Localizer.t("menu.help") }
         // 强制刷新
         mainMenu.update()
+
+        // 兜底：按典型顺序强制写入（App, File, Edit, View, Window, Help）
+        let titles = [Localizer.t("menu.file"), Localizer.t("menu.edit"), Localizer.t("menu.view"), Localizer.t("menu.window"), Localizer.t("menu.help")]
+        if mainMenu.items.count >= 6 {
+            for (idx, title) in titles.enumerated() {
+                let i = idx + 1
+                if i < mainMenu.items.count {
+                    mainMenu.items[i].title = title
+                }
+            }
+        }
     }
 
     private func localizeWindowMenu(_ menu: NSMenu) {
@@ -119,7 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "Move Tab to New Window": Localizer.t("menu.moveTabToNewWindow"),
                 "Show All Tabs": Localizer.t("menu.showAllTabs"),
                 "Show Tab Bar": Localizer.t("menu.showTabBar"),
-                "Hide Tab Bar": Localizer.t("menu.hideTabBar")
+                "Hide Tab Bar": Localizer.t("menu.hideTabBar"),
+                // File menu items we want to localize when they appear in Window/Tab contexts
+                "New Window": Localizer.t("menu.newWindow"),
+                "Close Window": Localizer.t("menu.closeWindow")
             ]
             if let s = map[i.title] { i.title = s }
         }
@@ -135,6 +152,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if i.keyEquivalent == "," && i.keyEquivalentModifierMask.contains(.command) {
                 i.title = Localizer.t("menu.settings")
             }
+            // File 菜单常见项
+            if i.title == "New Window" { i.title = Localizer.t("menu.newWindow") }
+            if i.title == "Close Window" { i.title = Localizer.t("menu.closeWindow") }
+            if i.title == "Close Tab" { i.title = Localizer.t("menu.closeTabFile") }
+        }
+    }
+
+    private func localizeCommonMenuItemsRecursively(_ menu: NSMenu) {
+        for i in menu.items {
+            if i.title == "Services" { i.title = Localizer.t("menu.services") }
+            if i.keyEquivalent == "," && i.keyEquivalentModifierMask.contains(.command) {
+                i.title = Localizer.t("menu.settings")
+            }
+            // File items
+            if i.title == "New Window" { i.title = Localizer.t("menu.newWindow") }
+            if i.title == "Close Window" { i.title = Localizer.t("menu.closeWindow") }
+            if i.title == "Close Tab" { i.title = Localizer.t("menu.closeTabFile") }
+            // Window / Tab items
+            let windowMap: [String: String] = [
+                "Close Tab": Localizer.t("menu.closeTab"),
+                "Close Other Tabs": Localizer.t("menu.closeOtherTabs"),
+                "Move Tab to New Window": Localizer.t("menu.moveTabToNewWindow"),
+                "Show All Tabs": Localizer.t("menu.showAllTabs"),
+                "Show Tab Bar": Localizer.t("menu.showTabBar"),
+                "Hide Tab Bar": Localizer.t("menu.hideTabBar")
+            ]
+            if let s = windowMap[i.title] { i.title = s }
+            if let sub = i.submenu { localizeCommonMenuItemsRecursively(sub) }
         }
     }
 

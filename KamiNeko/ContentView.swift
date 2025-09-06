@@ -39,6 +39,9 @@ struct ContentView: View {
                         // 只绑定一次所属窗口，避免不同实例互相覆盖
                         if owningWindow == nil {
                             owningWindow = win
+                            // 标记为内容窗口，并附加主工具栏
+                            win.identifier = NSUserInterfaceItemIdentifier("KamiNeko.ContentWindow")
+                            BrowserToolbarController.shared.attach(to: win)
                             updateWindowTitle()
                         }
                     })
@@ -433,6 +436,7 @@ struct ContentView: View {
         let controller = NSHostingController(rootView: ContentView(initialDocument: doc))
         let newWindow = NSWindow(contentViewController: controller)
         newWindow.identifier = NSUserInterfaceItemIdentifier("KamiNeko.ContentWindow")
+        BrowserToolbarController.shared.attach(to: newWindow)
         if let doc = doc {
             let fallback = doc.fileURL?.lastPathComponent ?? doc.title
             let display = computeDisplayTitle(from: doc.content, fallback: fallback)

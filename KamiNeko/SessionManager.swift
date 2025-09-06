@@ -142,7 +142,8 @@ final class SessionManager {
 
     func startAutoSave(store: DocumentStore) {
         stopAutoSave()
-        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        guard UserDefaults.standard.bool(forKey: "enableAutoSave") else { return }
+        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             self.saveFileBackedDocumentsToDisk()
             self.saveAllStores()

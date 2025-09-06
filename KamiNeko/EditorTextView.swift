@@ -35,6 +35,8 @@ struct EditorTextView: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.autoresizingMask = [.width]
         textView.delegate = context.coordinator
+        context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
         textView.textContainerInset = NSSize(width: 8, height: 8)
         textView.font = NSFont.monospacedSystemFont(ofSize: document.fontSize, weight: .regular)
         if let container = textView.textContainer {
@@ -55,11 +57,18 @@ struct EditorTextView: NSViewRepresentable {
         // Line number ruler after documentView is set
         let lineNumberRuler = LineNumberRulerView(textView: textView, scrollView: scrollView)
         scrollView.verticalRulerView = lineNumberRuler
-        scrollView.hasVerticalRuler = true
-        scrollView.rulersVisible = true
-        context.coordinator.textView = textView
+        let showLines = UserDefaults.standard.bool(forKey: "showLineNumbers")
+        scrollView.hasVerticalRuler = showLines
+        scrollView.rulersVisible = showLines
         textView.textStorage?.delegate = context.coordinator
         textView.string = document.content
+        // Apply prefs and observe changes
+        context.coordinator.enableSyntaxHighlight = UserDefaults.standard.bool(forKey: "enableSyntaxHighlight")
+        context.coordinator.applyPreferences()
+        NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
+            context.coordinator.applyPreferences()
+        }
+
         // Make first responder if window is available shortly after creation
         DispatchQueue.main.async {
             if let window = scrollView.window { window.makeFirstResponder(textView) }
@@ -80,7 +89,10 @@ struct EditorTextView: NSViewRepresentable {
             container.widthTracksTextView = true
             container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
         }
-        (nsView.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+        // 减少行号标尺的重绘频率
+        if abs(currentSize - document.fontSize) > 0.5 {
+            (nsView.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+        }
 
         // Try to focus the text view when available
         DispatchQueue.main.async {
@@ -97,7 +109,9 @@ struct EditorTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
         var document: DocumentModel
         weak var textView: NSTextView?
+        weak var scrollView: NSScrollView?
         private var lastChange = Date()
+        var enableSyntaxHighlight: Bool = true
 
         init(document: DocumentModel) {
             self.document = document
@@ -111,10 +125,30 @@ struct EditorTextView: NSViewRepresentable {
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
-            guard editedMask.contains(.editedCharacters) || editedMask.contains(.editedAttributes) else { return }
-            let fullRange = NSRange(location: 0, length: textStorage.length)
-            SyntaxHighlighter.highlight(storage: textStorage, in: fullRange, defaultColor: NSColor.labelColor)
+            guard editedMask.contains(.editedCharacters) else { return }
+            guard enableSyntaxHighlight else { return }
+            // 只高亮编辑的区域附近，而不是整个文档
+            let extendedRange = NSRange(
+                location: max(0, editedRange.location - 100),
+                length: min(textStorage.length - max(0, editedRange.location - 100), editedRange.length + 200)
+            )
+            SyntaxHighlighter.highlight(storage: textStorage, in: extendedRange, defaultColor: NSColor.labelColor)
         }
+
+        func applyPreferences() {
+            let defaults = UserDefaults.standard
+            let showLines = defaults.bool(forKey: "showLineNumbers")
+            scrollView?.hasVerticalRuler = showLines
+            scrollView?.rulersVisible = showLines
+            enableSyntaxHighlight = defaults.bool(forKey: "enableSyntaxHighlight")
+        }
+    }
+}
+
+// 响应设置变更
+extension EditorTextView.Coordinator {
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        // reserved
     }
 }
 
@@ -165,6 +199,12 @@ final class ZoomableTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
+        // 延迟更新当前行高亮，避免输入时频繁重绘
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(updateCurrentLineHighlightDelayed), object: nil)
+        perform(#selector(updateCurrentLineHighlightDelayed), with: nil, afterDelay: 0.05)
+    }
+    
+    @objc private func updateCurrentLineHighlightDelayed() {
         updateCurrentLineHighlight()
     }
 

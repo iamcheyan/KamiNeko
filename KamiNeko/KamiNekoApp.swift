@@ -36,6 +36,12 @@ struct KamiNekoApp: App {
                 }
                 .keyboardShortcut("s", modifiers: [.command])
             }
+            CommandGroup(replacing: .appSettings) {
+                Button("设置…") {
+                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
             CommandMenu("工作目录") {
                 Button("显示当前工作目录") {
                     if let url = WorkingDirectoryManager.shared.directoryURL {
@@ -48,6 +54,9 @@ struct KamiNekoApp: App {
                     _ = WorkingDirectoryManager.shared.promptUserToChooseDirectory()
                 }
             }
+        }
+        Settings {
+            SettingsView()
         }
     }
 }

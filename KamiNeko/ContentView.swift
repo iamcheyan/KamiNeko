@@ -135,6 +135,20 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appZoomReset)) { _ in
             if let doc = store.selectedDocument() { doc.fontSize = 14 }
         })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appPreferencesChanged)) { _ in
+            // 行号显示切换
+            if let sv = (NSApp.keyWindow?.contentView?.subviews.compactMap { $0 as? NSScrollView }.first) {
+                let on = UserDefaults.standard.bool(forKey: "showLineNumbers")
+                sv.hasVerticalRuler = on
+                sv.rulersVisible = on
+            }
+            // 自动保存开关
+            if UserDefaults.standard.bool(forKey: "enableAutoSave") {
+                SessionManager.shared.startAutoSave(store: store)
+            } else {
+                SessionManager.shared.stopAutoSave()
+            }
+        })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .documentRenameRequested)) { note in
             if let name = note.userInfo?["title"] as? String, let doc = store.selectedDocument() {
                 doc.title = name

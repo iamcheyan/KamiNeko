@@ -80,7 +80,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "C221105C-5EA0-4C6E-B209-73EDF7CBE87E"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "Yes"
             filePath = "KamiNeko/SessionManager.swift"
@@ -116,7 +116,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "041AC5AB-C24D-43C7-9DF0-AB4C850ECB5D"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "Yes"
             filePath = "KamiNeko/SessionManager.swift"
@@ -146,36 +146,6 @@
                   </ActionContent>
                </BreakpointActionProxy>
             </Actions>
-            <Locations>
-               <Location
-                  uuid = "041AC5AB-C24D-43C7-9DF0-AB4C850ECB5D - 464ecc4bad803533"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "KamiNeko.SessionManager.saveSession(store: KamiNeko.DocumentStore) -&gt; ()"
-                  moduleName = "KamiNeko.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/tetsuya/Dev/KamiNeko/KamiNeko/SessionManager.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "55"
-                  endingLineNumber = "55">
-               </Location>
-               <Location
-                  uuid = "041AC5AB-C24D-43C7-9DF0-AB4C850ECB5D - 464ecc4bad803533"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "KamiNeko.SessionManager.saveSession(store: KamiNeko.DocumentStore) -&gt; ()"
-                  moduleName = "KamiNeko.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/tetsuya/Dev/KamiNeko/KamiNeko/SessionManager.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "55"
-                  endingLineNumber = "55">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

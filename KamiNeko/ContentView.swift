@@ -6,54 +6,144 @@
 //
 
 import SwiftUI
-import SwiftData
+import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @StateObject private var store = DocumentStore()
+    @State private var isShowingOpenPanel = false
+    @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
+
+    private var preferredScheme: ColorScheme? {
+        switch preferredSchemeRaw {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil // follow system
+        }
+    }
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+        VStack(spacing: 0) {
+            // Tab bar
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(store.documents) { doc in
+                        HStack(spacing: 6) {
+                            Text(doc.title)
+                                .foregroundColor(store.selectedDocumentID == doc.id ? .white : .primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(store.selectedDocumentID == doc.id ? Color.accentColor : Color.clear)
+                                .cornerRadius(6)
+                                .onTapGesture { store.select(doc) }
+                            Button(action: { store.close(doc) }) {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.leading, 4)
                     }
+                    Button(action: { store.newUntitled() }) {
+                        Image(systemName: "plus")
+                    }.buttonStyle(.plain)
                 }
-                .onDelete(perform: deleteItems)
+                .padding(6)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+            Divider()
+            // Editor area
+            if let doc = store.selectedDocument() {
+                EditorTextView(document: doc)
+                    .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                        SessionManager.shared.saveSession(store: store)
                     }
+                    .onReceive(NotificationCenter.default.publisher(for: .editorFontSizeChanged)) { output in
+                        if let size = output.userInfo?["fontSize"] as? CGFloat, let sdoc = store.selectedDocument() {
+                            sdoc.fontSize = size
+                        }
+                    }
+                    .onAppear(perform: setupShortcuts)
+            } else {
+                ZStack {
+                    Color(NSColor.textBackgroundColor)
+                    Text("新建文档或打开文件")
+                        .foregroundColor(.secondary)
                 }
             }
-        } detail: {
-            Text("Select an item")
+        }
+        .onAppear {
+            let restored = SessionManager.shared.restoreSession()
+            if restored.isEmpty {
+                store.newUntitled()
+            } else {
+                store.documents = restored
+                store.selectedDocumentID = restored.first?.id
+            }
+            SessionManager.shared.startAutoSave(store: store)
+        }
+        .onDisappear { SessionManager.shared.stopAutoSave() }
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Button(action: { store.newUntitled() }) { Label("新建", systemImage: "doc") }
+                Button(action: openFile) { Label("打开", systemImage: "folder") }
+                Button(action: { SessionManager.shared.saveSession(store: store) }) { Label("保存会话", systemImage: "tray.and.arrow.down") }
+                Button(action: toggleAppearance) {
+                    Label(preferredScheme == .dark ? "浅色" : "深色", systemImage: preferredScheme == .dark ? "sun.max" : "moon")
+                }
+            }
+        }
+        .preferredColorScheme(preferredScheme)
+        .onAppear { applyWindowAppearance() }
+        .onChange(of: preferredSchemeRaw) { _ in applyWindowAppearance() }
+    }
+
+    private func openFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.item]
+        if panel.runModal() == .OK, let url = panel.url {
+            store.open(url: url)
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func setupShortcuts() {
+        // Cmd+ / Cmd-
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.contains(.command) else { return event }
+            if event.characters == "+" || event.characters == "=" { // = is same key for +
+                store.adjustFontSize(delta: 1)
+                return nil
+            } else if event.characters == "-" {
+                store.adjustFontSize(delta: -1)
+                return nil
+            }
+            return event
         }
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    private func toggleAppearance() {
+        if preferredScheme == .dark {
+            preferredSchemeRaw = "light"
+        } else if preferredScheme == .light {
+            preferredSchemeRaw = "dark"
+        } else {
+            // if system, switch to dark first
+            preferredSchemeRaw = "dark"
+        }
+    }
+
+    private func applyWindowAppearance() {
+        let name: NSAppearance.Name? = {
+            switch preferredScheme {
+            case .some(.dark): return .darkAqua
+            case .some(.light): return .aqua
+            default: return nil
             }
+        }()
+        for window in NSApp.windows {
+            window.appearance = name.flatMap { NSAppearance(named: $0) }
         }
     }
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
-}

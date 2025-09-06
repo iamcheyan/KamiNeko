@@ -240,7 +240,21 @@ final class SessionManager {
                             d.updateLastModified()
                             try? WorkingDirectoryManager.shared.saveDocumentToJSON(d, at: url)
                             if d.type == .openedDocument, let p = d.path {
-                                let external = URL(fileURLWithPath: p)
+                                var external = URL(fileURLWithPath: p)
+                                // 尝试从 JSON 包装重新解析书签
+                                if let url = d.fileURL,
+                                   let data = try? Data(contentsOf: url),
+                                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                   let b64 = json["securityBookmark"] as? String,
+                                   let bm = Data(base64Encoded: b64) {
+                                    var isStale = false
+                                    if let resolved = try? URL(resolvingBookmarkData: bm, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &isStale) {
+                                        external = resolved
+                                    }
+                                }
+                                var didStart = false
+                                if external.startAccessingSecurityScopedResource() { didStart = true }
+                                defer { if didStart { external.stopAccessingSecurityScopedResource() } }
                                 try? d.content.data(using: .utf8)?.write(to: external)
                             }
                         } else {

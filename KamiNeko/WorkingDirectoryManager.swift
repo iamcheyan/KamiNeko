@@ -185,7 +185,17 @@ final class WorkingDirectoryManager {
             case .openedDocument:
                 path = json["path"] as? String
                 if let pathString = path {
-                    let externalURL = URL(fileURLWithPath: pathString)
+                    var externalURL = URL(fileURLWithPath: pathString)
+                    // 优先使用安全书签恢复 URL 访问
+                    if let b64 = json["securityBookmark"] as? String, let data = Data(base64Encoded: b64) {
+                        var isStale = false
+                        if let resolved = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &isStale) {
+                            externalURL = resolved
+                        }
+                    }
+                    var didStart = false
+                    if externalURL.startAccessingSecurityScopedResource() { didStart = true }
+                    defer { if didStart { externalURL.stopAccessingSecurityScopedResource() } }
                     content = (try? String(contentsOf: externalURL)) ?? ""
                 }
             }
@@ -246,6 +256,8 @@ final class WorkingDirectoryManager {
         }
 
         let now = Date()
+        let bookmarkData = try? externalURL.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        let bookmarkBase64 = bookmarkData?.base64EncodedString()
         let wrapper: [String: Any] = [
             "id": UUID().uuidString,
             "title": externalURL.lastPathComponent,
@@ -257,7 +269,8 @@ final class WorkingDirectoryManager {
             "fontSize": 14,
             "contentFilePath": NSNull(),
             "filePath": externalURL.path,
-            "isUntitled": false
+            "isUntitled": false,
+            "securityBookmark": bookmarkBase64 ?? NSNull()
         ]
         let data = try JSONSerialization.data(withJSONObject: wrapper, options: [.prettyPrinted, .withoutEscapingSlashes])
         try data.write(to: candidate)

@@ -247,6 +247,36 @@ final class ZoomableTextView: NSTextView {
         currentLineLayer.frame = frame
         CATransaction.commit()
     }
+
+    // MARK: - Drag & Drop to open files in new tab (prevent path insertion)
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if hasFileURLs(in: sender) { return .copy }
+        return super.draggingEntered(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { true }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = readFileURLs(from: sender), urls.isEmpty == false else { return false }
+        for url in urls {
+            NotificationCenter.default.post(name: .openFileURLDropped, object: nil, userInfo: ["url": url])
+        }
+        return true
+    }
+
+    private func hasFileURLs(in sender: NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+        let objs = pb.readObjects(forClasses: [NSURL.self], options: [NSPasteboard.ReadingOptionKey.urlReadingFileURLsOnly: true])
+        return (objs as? [URL])?.isEmpty == false
+    }
+
+    private func readFileURLs(from sender: NSDraggingInfo) -> [URL]? {
+        let pb = sender.draggingPasteboard
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [NSPasteboard.ReadingOptionKey.urlReadingFileURLsOnly: true]) as? [URL] {
+            return urls
+        }
+        return nil
+    }
 }
 
 final class ZoomableScrollView: NSScrollView {
@@ -349,6 +379,7 @@ extension Notification.Name {
     static let documentRenameRequested = Notification.Name("KamiNekoDocumentRenameRequested")
     static let documentEdited = Notification.Name("KamiNekoDocumentEdited")
     static let documentContentChanged = Notification.Name("KamiNekoDocumentContentChanged")
+    static let openFileURLDropped = Notification.Name("KamiNekoOpenFileURLDropped")
 }
 
 

@@ -18,6 +18,7 @@ struct ContentView: View {
     }
     @StateObject private var store = DocumentStore()
     @State private var isShowingOpenPanel = false
+    @State private var isDropTarget: Bool = false
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
     // Using system window tabs; no custom tab height needed
     @State private var tabCount: Int = 1
@@ -213,6 +214,12 @@ struct ContentView: View {
                 updateWindowTitle()
             }
         })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .openFileURLDropped)) { note in
+            guard let win = owningWindow, win === NSApp.keyWindow else { return }
+            if let url = note.userInfo?["url"] as? URL {
+                openURLInNewTab(url)
+            }
+        })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             if let win = note.object as? NSWindow, win === owningWindow {
                 updateWindowTitle()
@@ -319,6 +326,37 @@ struct ContentView: View {
         }
     }
 
+    private func handleFileDrop(_ providers: [NSItemProvider]) -> Bool {
+        var accepted = false
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                accepted = true
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                    if let url = item as? URL {
+                        openURLInNewTab(url)
+                    } else if let data = item as? Data, let s = String(data: data, encoding: .utf8), let url = URL(string: s) {
+                        openURLInNewTab(url)
+                    } else if let str = item as? String, let url = URL(string: str) {
+                        openURLInNewTab(url)
+                    }
+                }
+            }
+        }
+        return accepted
+    }
+
+    private func openURLInNewTab(_ url: URL) {
+        let wrapperURL: URL = {
+            if url.pathExtension.lowercased() == "json" { return url }
+            return (try? WorkingDirectoryManager.shared.createJSONWrapperForExternalFile(url)) ?? url
+        }()
+        let doc = makeDoc(for: wrapperURL)
+        DispatchQueue.main.async {
+            createSystemTabWindow(with: doc, baseWindow: owningWindow ?? NSApp.keyWindow)
+            updateTabCount()
+        }
+    }
+
     private func openFile() {
         // 防抖：避免重复弹出
         if isShowingOpenPanel { return }
@@ -330,7 +368,11 @@ struct ContentView: View {
         panel.allowedContentTypes = [.item]
         let result = panel.runModal()
         if result == .OK, let url = panel.url {
-            let doc = makeDoc(for: url)
+            let wrapperURL: URL = {
+                if url.pathExtension.lowercased() == "json" { return url }
+                return (try? WorkingDirectoryManager.shared.createJSONWrapperForExternalFile(url)) ?? url
+            }()
+            let doc = makeDoc(for: wrapperURL)
             // 打开到新系统标签
             createSystemTabWindow(with: doc, baseWindow: owningWindow ?? NSApp.keyWindow)
             updateTabCount()

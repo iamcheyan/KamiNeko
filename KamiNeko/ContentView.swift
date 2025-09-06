@@ -330,8 +330,10 @@ struct ContentView: View {
         panel.allowedContentTypes = [.item]
         let result = panel.runModal()
         if result == .OK, let url = panel.url {
-            store.open(url: url)
-            updateWindowTitle()
+            let doc = makeDoc(for: url)
+            // 打开到新系统标签
+            createSystemTabWindow(with: doc, baseWindow: owningWindow ?? NSApp.keyWindow)
+            updateTabCount()
         }
     }
 

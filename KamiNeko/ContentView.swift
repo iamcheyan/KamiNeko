@@ -184,7 +184,12 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarUndo)) { _ in performUndo() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarRedo)) { _ in performRedo() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in newTab() })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in
+            // 仅当前激活窗口的 ContentView 响应，避免多个窗口重复弹窗
+            if let win = owningWindow, win === NSApp.keyWindow {
+                openFile()
+            }
+        })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appSaveFile)) { _ in
             // 写入所有文件并保存整个会话
             SessionManager.shared.saveFileBackedDocumentsToDisk()
@@ -315,11 +320,16 @@ struct ContentView: View {
     }
 
     private func openFile() {
+        // 防抖：避免重复弹出
+        if isShowingOpenPanel { return }
+        isShowingOpenPanel = true
+        defer { isShowingOpenPanel = false }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.item]
-        if panel.runModal() == .OK, let url = panel.url {
+        let result = panel.runModal()
+        if result == .OK, let url = panel.url {
             store.open(url: url)
             updateWindowTitle()
         }

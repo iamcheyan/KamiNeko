@@ -51,8 +51,28 @@ final class SessionManager {
 
     // Aggregate save across all open stores (multiple windows/tabs)
     func saveAllStores() {
+        prepareDirectories()
+        var allSessions: [DocumentSession] = []
+        
+        // Collect all documents from all stores
         for case let store as DocumentStore in DocumentStore.allStores.allObjects {
-            saveSession(store: store)
+            let sessions: [DocumentSession] = store.documents.map { doc in
+                let tempURL = tempContentURL(for: doc.id)
+                // Always write snapshot for recovery (both untitled and named)
+                if doc.isDirty || !fileManager.fileExists(atPath: tempURL.path) {
+                    try? doc.content.data(using: .utf8)?.write(to: tempURL)
+                    doc.isDirty = false
+                }
+                return doc.toSession(tempContentPath: tempURL.path)
+            }
+            allSessions.append(contentsOf: sessions)
+        }
+        
+        // Save all sessions to one file
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        if let data = try? encoder.encode(allSessions) {
+            try? data.write(to: sessionFileURL)
         }
     }
 

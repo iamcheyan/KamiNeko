@@ -29,7 +29,7 @@ struct ContentView: View {
             if let doc = store.selectedDocument() {
                 EditorTextView(document: doc)
                     .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                        SessionManager.shared.saveSession(store: store)
+                        SessionManager.shared.saveAllStores()
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .editorFontSizeChanged)) { output in
                         if let size = output.userInfo?["fontSize"] as? CGFloat, let sdoc = store.selectedDocument() {
@@ -46,21 +46,41 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // For new tabs/windows, always create a fresh empty document
-            // Only restore session on the very first app launch when no stores exist
             if store.documents.isEmpty {
-                let shouldRestoreSession = DocumentStore.allStores.allObjects.count <= 1
-                if shouldRestoreSession {
+                // Check if this is app startup (first store) or a new tab
+                let allStores = DocumentStore.allStores.allObjects
+                let isAppStartup = allStores.count <= 1 && allStores.allSatisfy { ($0 as? DocumentStore)?.documents.isEmpty ?? true }
+                
+                if isAppStartup {
+                    // App startup: restore documents and fan out to multiple tabs
                     let restored = SessionManager.shared.restoreSession()
                     if restored.isEmpty {
                         store.newUntitled()
                     } else {
-                        store.documents = restored
-                        store.selectedDocumentID = restored.first?.id
+                        // Assign the first document to this store
+                        let firstDoc = restored.first!
+                        store.documents = [firstDoc]
+                        store.selectedDocumentID = firstDoc.id
+                        
+                        // For remaining documents, create additional tabs; each new tab
+                        // will pick up one unassigned restored document on its own appear
+                        if restored.count > 1 {
+                            for _ in 1..<restored.count {
+                                newTab()
+                            }
+                        }
                     }
                 } else {
-                    // This is a new tab/window, create empty document
-                    store.newUntitled()
+                    // New tab: try to take one of the restored documents not yet assigned
+                    let restored = SessionManager.shared.restoreSession()
+                    let assignedIDs = Set(DocumentStore.allStores.allObjects.flatMap { ($0 as? DocumentStore)?.documents.map { $0.id } ?? [] })
+                    if let docToAssign = restored.first(where: { !assignedIDs.contains($0.id) }) {
+                        store.documents = [docToAssign]
+                        store.selectedDocumentID = docToAssign.id
+                    } else {
+                        // No pending restored docs, create an empty one
+                        store.newUntitled()
+                    }
                 }
             } else if store.selectedDocument() == nil {
                 store.newUntitled()

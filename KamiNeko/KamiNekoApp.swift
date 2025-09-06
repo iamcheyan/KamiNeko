@@ -36,12 +36,7 @@ struct KamiNekoApp: App {
                 }
                 .keyboardShortcut("s", modifiers: [.command])
             }
-            CommandGroup(replacing: .appSettings) {
-                Button("设置…") {
-                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-                }
-                .keyboardShortcut(",", modifiers: [.command])
-            }
+            // 使用系统提供的 Settings 窗口（由 Settings 场景生成），避免重复菜单
             CommandMenu("工作目录") {
                 Button("显示当前工作目录") {
                     if let url = WorkingDirectoryManager.shared.directoryURL {
@@ -53,6 +48,13 @@ struct KamiNekoApp: App {
                 Button("重新设置工作目录…") {
                     _ = WorkingDirectoryManager.shared.promptUserToChooseDirectory()
                 }
+            }
+            CommandMenu("文件") {
+                Divider()
+                Button("删除当前文件并关闭标签") {
+                    NotificationCenter.default.post(name: .appDeleteCurrent, object: nil)
+                }
+                .keyboardShortcut(.delete, modifiers: [.command])
             }
         }
         Settings {

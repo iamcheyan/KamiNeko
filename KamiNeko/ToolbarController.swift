@@ -64,7 +64,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, allTabsId]
+        [newId, openId, saveId, .flexibleSpace, centerId, .flexibleSpace, themeId, zoomId, allTabsId]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -77,20 +77,11 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
             titleField.textColor = .labelColor
             titleField.translatesAutoresizingMaskIntoConstraints = false
 
-            // Save button left of title (disk icon)
-            let saveButton = NSButton(image: NSImage(systemSymbolName: "externaldrive", accessibilityDescription: nil)!, target: self, action: #selector(saveFile))
-            saveButton.bezelStyle = .texturedRounded
-            saveButton.translatesAutoresizingMaskIntoConstraints = false
-
             let container = NSView()
             container.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(saveButton)
             container.addSubview(titleField)
             NSLayoutConstraint.activate([
-                saveButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
-                saveButton.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-
-                titleField.leadingAnchor.constraint(equalTo: saveButton.trailingAnchor, constant: 8),
+                titleField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
                 titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
                 titleField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
 
@@ -186,9 +177,7 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
     }
 
     private func currentTitle() -> String {
-        if let url = NSApp.keyWindow?.representedURL {
-            return url.path
-        }
+        // 中心标题与标签标题一致：使用窗口标题（已由 ContentView 计算为每个文档的内容标题）
         return (NSApp.keyWindow?.title.isEmpty == false ? NSApp.keyWindow?.title : "Untitled")!
     }
 

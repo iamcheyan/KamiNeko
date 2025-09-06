@@ -168,12 +168,16 @@ struct ContentView: View {
         })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarUndo)) { _ in performUndo() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarRedo)) { _ in performRedo() })
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in store.newUntitled() })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in newTab() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appSaveFile)) { _ in
             // 写入所有文件并保存整个会话
             SessionManager.shared.saveFileBackedDocumentsToDisk()
             SessionManager.shared.saveAllStores()
+        })
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appDeleteCurrent)) { _ in
+            // 统一由 willClose 分支执行删除逻辑
+            NSApp.keyWindow?.performClose(nil)
         })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarToggleTheme)) { _ in
             toggleAppearance()
@@ -191,10 +195,19 @@ struct ContentView: View {
         })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in updateTabCount() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
-            // 仅删除与当前窗口对应的空白文件
-            if SessionManager.shared.isTerminating { return }
-            if let url = store.selectedDocument()?.fileURL, WorkingDirectoryManager.shared.isWhitespaceOnly(url) {
-                try? WorkingDirectoryManager.shared.deleteFile(at: url)
+            // 关闭标签即删除对应文件；随后若没有任何标签，则删除工作目录内所有文件
+            if let url = store.selectedDocument()?.fileURL {
+                _ = WorkingDirectoryManager.shared.withDirectoryAccess {
+                    try? WorkingDirectoryManager.shared.deleteFile(at: url)
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let anyWindowVisible = NSApp.windows.contains { $0.isVisible }
+                let anyStoreAlive = (DocumentStore.allStores.allObjects.isEmpty == false)
+                if !anyWindowVisible || !anyStoreAlive {
+                    let files = WorkingDirectoryManager.shared.listFiles()
+                    for f in files { try? WorkingDirectoryManager.shared.deleteFile(at: f) }
+                }
             }
         })
         return view

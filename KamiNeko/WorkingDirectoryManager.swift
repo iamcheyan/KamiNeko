@@ -143,7 +143,10 @@ final class WorkingDirectoryManager {
 
     private func timestampString() -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        // 年月日时分秒毫秒，无分隔符，例如：20250906212332123
+        formatter.dateFormat = "yyyyMMddHHmmssSSS"
         return formatter.string(from: Date())
     }
 }

@@ -77,13 +77,23 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
             titleField.textColor = .labelColor
             titleField.translatesAutoresizingMaskIntoConstraints = false
 
+            // Save button left of title
+            let saveButton = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)!, target: self, action: #selector(saveFile))
+            saveButton.bezelStyle = .texturedRounded
+            saveButton.translatesAutoresizingMaskIntoConstraints = false
+
             let container = NSView()
             container.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(saveButton)
             container.addSubview(titleField)
             NSLayoutConstraint.activate([
-                titleField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+                saveButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+                saveButton.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+
+                titleField.leadingAnchor.constraint(equalTo: saveButton.trailingAnchor, constant: 8),
                 titleField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
                 titleField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+
                 container.heightAnchor.constraint(equalToConstant: 22),
                 container.widthAnchor.constraint(lessThanOrEqualToConstant: 900)
             ])

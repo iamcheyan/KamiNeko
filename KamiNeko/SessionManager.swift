@@ -15,6 +15,7 @@ final class SessionManager {
     private let fileManager = FileManager.default
     private var autosaveTimer: Timer?
     var isTerminating: Bool = false
+    private var debounceTimer: Timer?
 
     // Fan-out queue for session restoration across system tabs
     // First ContentView will load sessions here and create (count-1) tabs.
@@ -143,17 +144,25 @@ final class SessionManager {
     func startAutoSave(store: DocumentStore) {
         stopAutoSave()
         guard UserDefaults.standard.bool(forKey: "enableAutoSave") else { return }
-        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            self.saveFileBackedDocumentsToDisk()
-            self.saveAllStores()
-        }
-        RunLoop.main.add(autosaveTimer!, forMode: .common)
+        // 监听文档编辑事件，进行去抖动保存
+        NotificationCenter.default.addObserver(self, selector: #selector(scheduleDebouncedSave), name: .documentEdited, object: nil)
     }
 
     func stopAutoSave() {
-        autosaveTimer?.invalidate()
-        autosaveTimer = nil
+        autosaveTimer?.invalidate(); autosaveTimer = nil
+        debounceTimer?.invalidate(); debounceTimer = nil
+        NotificationCenter.default.removeObserver(self, name: .documentEdited, object: nil)
+    }
+
+    @objc private func scheduleDebouncedSave() {
+        debounceTimer?.invalidate()
+        debounceTimer = Timer.scheduledTimer(withTimeInterval: 120.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            guard UserDefaults.standard.bool(forKey: "enableAutoSave") else { return }
+            self.saveFileBackedDocumentsToDisk()
+            self.saveAllStores()
+        }
+        if let t = debounceTimer { RunLoop.main.add(t, forMode: .common) }
     }
 
     // 将所有文件型文档写入磁盘

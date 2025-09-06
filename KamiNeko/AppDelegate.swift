@@ -9,6 +9,9 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldRestoreWindows(_ app: NSApplication) -> Bool { false }
+    @available(macOS 13.0, *)
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) {
         SessionManager.shared.isTerminating = true
     }

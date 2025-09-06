@@ -122,6 +122,7 @@ struct EditorTextView: NSViewRepresentable {
             document.content = tv.string
             document.isDirty = true
             lastChange = Date()
+            NotificationCenter.default.post(name: .documentEdited, object: nil)
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
@@ -327,6 +328,7 @@ extension Notification.Name {
     static let toolbarShowAllTabs = Notification.Name("KamiNekoToolbarShowAllTabs")
     static let documentTitleChanged = Notification.Name("KamiNekoDocumentTitleChanged")
     static let documentRenameRequested = Notification.Name("KamiNekoDocumentRenameRequested")
+    static let documentEdited = Notification.Name("KamiNekoDocumentEdited")
 }
 
 

@@ -56,9 +56,14 @@ struct ContentView: View {
                             return true
                         }
                         if files.isEmpty {
-                            // 目录为空：不创建任何标签或文件
-                            store.documents = []
-                            store.selectedDocumentID = nil
+                            // 目录为空：自动创建一个新文件与标签
+                            if let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
+                                let doc = makeDoc(for: newURL)
+                                store.documents = [doc]
+                                store.selectedDocumentID = doc.id
+                            } else {
+                                store.newUntitled()
+                            }
                         } else {
                             // 目录已有文件：首个在当前标签，其余扇出
                             let firstURL = files[0]
@@ -166,7 +171,7 @@ struct ContentView: View {
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarNewDoc)) { _ in store.newUntitled() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarOpenFile)) { _ in openFile() })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .appSaveFile)) { _ in
-            // 写入当前文件并保存会话
+            // 写入所有文件并保存整个会话
             SessionManager.shared.saveFileBackedDocumentsToDisk()
             SessionManager.shared.saveAllStores()
         })
@@ -193,7 +198,6 @@ struct ContentView: View {
         AnyView(
             ZStack(alignment: .bottom) {
                 editorArea()
-                bottomTabCounter()
             }
         )
     }
@@ -238,6 +242,41 @@ struct ContentView: View {
         }
         .padding(.bottom, 6)
         .allowsHitTesting(false)
+    }
+
+    // 在 Tab Overview（九宫格）模式下追加一个只读 overlay 窗口显示计数
+    private func showTabCountOverlay() {
+        guard let key = NSApp.keyWindow else { return }
+        let overlayTag = 0xC0FFEE
+        if let existing = key.contentView?.viewWithTag(overlayTag) { existing.removeFromSuperview() }
+
+        let label = NSTextField(labelWithString: "已打开标签：\( (key.tabbedWindows?.count ?? 1) )")
+        label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.wantsLayer = true
+        label.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.6).cgColor
+        label.layer?.cornerRadius = 8
+        label.tag = overlayTag
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        key.contentView?.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.centerXAnchor.constraint(equalTo: key.contentView!.centerXAnchor),
+            container.bottomAnchor.constraint(equalTo: key.contentView!.bottomAnchor, constant: -8),
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -10),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6)
+        ])
+
+        // 自动隐藏（离开九宫格或3秒后）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            container.removeFromSuperview()
+        }
     }
 
     private func openFile() {
@@ -312,7 +351,10 @@ struct ContentView: View {
         updateTabCount()
     }
     private func showAllTabs() {
-        if let window = NSApp.keyWindow { _ = window.perform(NSSelectorFromString("toggleTabOverview:"), with: nil) }
+        if let window = NSApp.keyWindow {
+            _ = window.perform(NSSelectorFromString("toggleTabOverview:"), with: nil)
+            showTabCountOverlay()
+        }
     }
 
     private func createSystemTabWindow(with doc: DocumentModel? = nil, baseWindow: NSWindow? = NSApp.keyWindow) {

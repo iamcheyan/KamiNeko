@@ -77,8 +77,8 @@ final class BrowserToolbarController: NSObject, NSToolbarDelegate {
             titleField.textColor = .labelColor
             titleField.translatesAutoresizingMaskIntoConstraints = false
 
-            // Save button left of title
-            let saveButton = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)!, target: self, action: #selector(saveFile))
+            // Save button left of title (disk icon)
+            let saveButton = NSButton(image: NSImage(systemSymbolName: "externaldrive", accessibilityDescription: nil)!, target: self, action: #selector(saveFile))
             saveButton.bezelStyle = .texturedRounded
             saveButton.translatesAutoresizingMaskIntoConstraints = false
 

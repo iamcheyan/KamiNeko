@@ -407,8 +407,12 @@ struct ContentView: View {
         // 仅处理文件型文档：把标题作为新文件名
         if let url = doc.fileURL {
             do {
-                let newURL = try WorkingDirectoryManager.shared.renameFile(at: url, to: doc.title)
-                doc.fileURL = newURL
+                let currentBase = url.deletingPathExtension().lastPathComponent
+                // 仅当标题与当前文件名不同才重命名，避免无意义的“ 2”后缀
+                if doc.title != currentBase && doc.title.isEmpty == false {
+                    let newURL = try WorkingDirectoryManager.shared.renameFile(at: url, to: doc.title)
+                    doc.fileURL = newURL
+                }
             } catch {
                 // 忽略重命名失败
             }

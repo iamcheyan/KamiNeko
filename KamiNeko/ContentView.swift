@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var isDropTarget: Bool = false
     @AppStorage("appLanguage") private var appLanguage: String = "system"
     @AppStorage("preferredColorScheme") private var preferredSchemeRaw: String = "system"
+    @AppStorage("showFindBar") private var showFindBar: Bool = true
     // Using system window tabs; no custom tab height needed
     @State private var tabCount: Int = 1
     @State private var owningWindow: NSWindow? = nil
@@ -272,7 +273,7 @@ struct ContentView: View {
                         }
                     }
                     .onAppear(perform: setupShortcuts)
-                    .background(FindBarAccessor())
+                    .background(FindBarAttachView())
             } else {
                 ZStack {
                     Color(NSColor.textBackgroundColor)
@@ -592,17 +593,21 @@ private struct WindowAccessor: NSViewRepresentable {
     }
 }
 
-// MARK: - Find bar controller (默认显示/菜单控制)
-private struct FindBarAccessor: NSViewRepresentable {
+// MARK: - 底部查找/替换栏（固定在程序最下方）
+// 使用 NSScrollView 的系统查找栏，固定显示在内容下方
+private struct FindBarAttachView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
         DispatchQueue.main.async { [weak v] in
-            if let sv = v?.enclosingScrollView(), let tv = sv.documentView as? NSTextView {
-                tv.usesFindBar = true
+            guard let sv = findScrollView(from: v), let tv = sv.documentView as? NSTextView else { return }
+            tv.usesFindBar = true
+            sv.findBarPosition = .belowContent
+            applyShowState(scrollView: sv)
+            NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
                 applyShowState(scrollView: sv)
-                NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
-                    applyShowState(scrollView: sv)
-                }
+            }
+            NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { _ in
+                applyShowState(scrollView: sv)
             }
         }
         return v
@@ -610,7 +615,7 @@ private struct FindBarAccessor: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async { [weak nsView] in
-            if let sv = nsView?.enclosingScrollView() { applyShowState(scrollView: sv) }
+            if let sv = findScrollView(from: nsView) { applyShowState(scrollView: sv) }
         }
     }
 
@@ -623,15 +628,10 @@ private struct FindBarAccessor: NSViewRepresentable {
         item.tag = (show ? NSTextFinder.Action.showFindInterface : NSTextFinder.Action.hideFindInterface).rawValue
         tv.performTextFinderAction(item)
     }
-}
 
-private extension NSView {
-    func enclosingScrollView() -> NSScrollView? {
-        var v: NSView? = self
-        while let current = v {
-            if let sv = current as? NSScrollView { return sv }
-            v = current.superview
-        }
+    private func findScrollView(from view: NSView?) -> NSScrollView? {
+        var v = view
+        while let current = v { if let sv = current as? NSScrollView { return sv }; v = current.superview }
         return nil
     }
 }

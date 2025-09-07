@@ -28,6 +28,7 @@
         private var titleEditField: NSTextField?
         private var zoomSlider: NSSlider?
         private var lastKnownTitle: String = "Untitled"
+        private let findAccessoryIdentifier = NSUserInterfaceItemIdentifier("KamiNeko.FindAccessory")
         private func currentThemeSymbolName() -> String {
             // 浅色显示太阳，深色显示月亮
             let scheme = UserDefaults.standard.string(forKey: "preferredColorScheme") ?? "system"
@@ -58,6 +59,8 @@
             NotificationCenter.default.addObserver(self, selector: #selector(updateTitle(_:)), name: .documentTitleChanged, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(windowBecameKey(_:)), name: NSWindow.didBecomeKeyNotification, object: window)
             NotificationCenter.default.addObserver(self, selector: #selector(appBecameActive), name: NSApplication.didBecomeActiveNotification, object: nil)
+
+            attachFindAccessory(to: window)
         }
 
         // MARK: - Toolbar delegate
@@ -247,6 +250,46 @@
             sender.removeFromSuperview()
             self.titleEditField = nil
             self.titleLabel?.isHidden = false
+        }
+
+        // MARK: - Titlebar accessory: Find toggle
+        private func attachFindAccessory(to window: NSWindow) {
+            if window.titlebarAccessoryViewControllers.contains(where: { $0.view.identifier == findAccessoryIdentifier }) { return }
+            let button = NSButton(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)!, target: self, action: #selector(toggleFindBarFromAccessory))
+            button.bezelStyle = .texturedRounded
+            button.toolTip = Localizer.t("menu.find")
+            let container = NSView()
+            container.addSubview(button)
+            container.translatesAutoresizingMaskIntoConstraints = false
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                button.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                button.topAnchor.constraint(equalTo: container.topAnchor),
+                button.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            ])
+            container.identifier = findAccessoryIdentifier
+            let vc = NSTitlebarAccessoryViewController()
+            vc.view = container
+            vc.layoutAttribute = .trailing
+            window.addTitlebarAccessoryViewController(vc)
+        }
+
+        @objc private func toggleFindBarFromAccessory() {
+            let defaults = UserDefaults.standard
+            let newValue = !defaults.bool(forKey: "showFindBar")
+            defaults.set(newValue, forKey: "showFindBar")
+            NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
+            // 同步更新“显示”菜单的勾选
+            if let mainMenu = NSApp.mainMenu {
+                for item in mainMenu.items {
+                    if let submenu = item.submenu, item.title == Localizer.t("menu.view") {
+                        if let i = submenu.items.first(where: { $0.title == Localizer.t("view.showFindBar") }) {
+                            i.state = newValue ? .on : .off
+                        }
+                    }
+                }
+            }
         }
     }
 

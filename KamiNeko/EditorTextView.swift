@@ -41,7 +41,10 @@ struct EditorTextView: NSViewRepresentable {
         textView.font = NSFont.monospacedSystemFont(ofSize: document.fontSize, weight: .regular)
         if let container = textView.textContainer {
             container.widthTracksTextView = true
-            container.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
+            // 添加右边距以防止文字被切掉，特别是在没有滚动条时
+            let rightMargin: CGFloat = 10
+            let availableWidth = max(0, scrollView.contentSize.width - rightMargin)
+            container.containerSize = NSSize(width: availableWidth, height: .greatestFiniteMagnitude)
             container.lineFragmentPadding = 5
         }
 
@@ -84,6 +87,13 @@ struct EditorTextView: NSViewRepresentable {
         NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
             context.coordinator.applyPreferences()
         }
+        
+        // 监听滚动视图内容边界变化，确保文本容器尺寸正确
+        let contentView = scrollView.contentView
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: contentView, queue: .main) { _ in
+            context.coordinator.updateTextContainerSize()
+        }
 
         // Make first responder if window is available shortly after creation
         DispatchQueue.main.async {
@@ -100,10 +110,20 @@ struct EditorTextView: NSViewRepresentable {
         let currentSize = textView.font?.pointSize ?? 14
         if abs(currentSize - document.fontSize) > 0.5 {
             textView.font = NSFont.monospacedSystemFont(ofSize: document.fontSize, weight: .regular)
+            
+            // 字体大小改变时，手动触发窗口调整大小通知来更新容器
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak nsView] in
+                if let window = nsView?.window {
+                    NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
+                }
+            }
         }
         if let container = textView.textContainer, let sv = textView.enclosingScrollView {
             container.widthTracksTextView = true
-            container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
+            // 添加右边距以防止文字被切掉，特别是在没有滚动条时
+            let rightMargin: CGFloat = 10
+            let availableWidth = max(0, sv.contentSize.width - rightMargin)
+            container.containerSize = NSSize(width: availableWidth, height: .greatestFiniteMagnitude)
         }
         // 减少行号标尺的重绘频率
         if abs(currentSize - document.fontSize) > 0.5 {
@@ -165,6 +185,17 @@ struct EditorTextView: NSViewRepresentable {
             enableSyntaxHighlight = defaults.bool(forKey: "enableSyntaxHighlight")
             miniMap?.isHidden = !defaults.bool(forKey: "showMiniMap")
         }
+        
+        func updateTextContainerSize() {
+            guard let textView = textView, let container = textView.textContainer, let scrollView = scrollView else { return }
+            container.widthTracksTextView = true
+            // 添加右边距以防止文字被切掉，特别是在没有滚动条时
+            let rightMargin: CGFloat = 10
+            let availableWidth = max(0, scrollView.contentSize.width - rightMargin)
+            container.containerSize = NSSize(width: availableWidth, height: .greatestFiniteMagnitude)
+            // 强制重新布局以确保换行正确
+            textView.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.string.count), actualCharacterRange: nil)
+        }
     }
 }
 
@@ -216,10 +247,18 @@ final class ZoomableTextView: NSTextView {
             let newSize = max(8, min(64, current + step))
             if newSize != current {
                 self.font = NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
-                if let editor = self.enclosingScrollView?.superview?.superview as? NSView { _ = editor }
+                
                 // Sync back to model via responder chain notification
                 NotificationCenter.default.post(name: .editorFontSizeChanged, object: self, userInfo: ["fontSize": newSize])
                 (enclosingScrollView?.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+                
+                // 手动触发窗口调整大小的逻辑，因为那个逻辑是正确的
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in
+                    if let window = self?.window {
+                        NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
+                    }
+                }
+                
                 // Do not call super; avoid scrolling when zooming
                 return
             }
@@ -228,6 +267,7 @@ final class ZoomableTextView: NSTextView {
         // 滚动后更新高亮位置
         updateCurrentLineHighlight()
     }
+    
 
     override func setSelectedRange(_ charRange: NSRange) {
         super.setSelectedRange(charRange)
@@ -376,8 +416,17 @@ final class ZoomableScrollView: NSScrollView {
                 let newSize = max(8, min(64, current + step))
                 if newSize != current {
                     tv.font = NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
+                    
                     NotificationCenter.default.post(name: .editorFontSizeChanged, object: tv, userInfo: ["fontSize": newSize])
                     (self.verticalRulerView as? LineNumberRulerView)?.needsDisplay = true
+                    
+                    // 手动触发窗口调整大小的逻辑，因为那个逻辑是正确的
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in
+                        if let window = self?.window {
+                            NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
+                        }
+                    }
+                    
                     return
                 }
             }
@@ -430,7 +479,10 @@ final class LineNumberRulerView: NSRulerView {
             let rect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &lineRange, withoutAdditionalLayout: true)
 
             let y = rect.minY + relativePoint.y
-            let attr = [NSAttributedString.Key.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+            // 根据文本视图的字体大小调整行号字体大小，但保持相对较小
+            let textFontSize = textView.font?.pointSize ?? 14
+            let rulerFontSize = max(9, min(13, textFontSize * 0.8))
+            let attr = [NSAttributedString.Key.font: NSFont.monospacedSystemFont(ofSize: rulerFontSize, weight: .regular),
                         NSAttributedString.Key.foregroundColor: NSColor.secondaryLabelColor]
             let str = NSAttributedString(string: "\(lineNumber)", attributes: attr)
             let size = str.size()

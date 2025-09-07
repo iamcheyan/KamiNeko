@@ -66,7 +66,7 @@ struct ContentView: View {
                     if let _ = WorkingDirectoryManager.shared.directoryURL ?? WorkingDirectoryManager.shared.promptUserToChooseDirectory() {
                         // 列表前先清理一次空文件
                         WorkingDirectoryManager.shared.cleanEmptyFilesInDirectory()
-                        var files = WorkingDirectoryManager.shared.listFiles()
+                        let files = WorkingDirectoryManager.shared.listFiles()
                         if files.isEmpty {
                             // 目录为空：不创建空文件，直接打开未命名文档（内存态，不落盘）
                             store.newUntitled()
@@ -169,7 +169,13 @@ struct ContentView: View {
         })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { _ in
             if let tv = (NSApp.keyWindow?.contentView?.subviews.compactMap { $0 as? NSScrollView }.first?.documentView as? NSTextView), let container = tv.textContainer, let sv = tv.enclosingScrollView {
-                container.containerSize = NSSize(width: sv.contentSize.width, height: .greatestFiniteMagnitude)
+                container.widthTracksTextView = true
+                // 添加右边距以防止文字被切掉，特别是在没有滚动条时
+                let rightMargin: CGFloat = 10
+                let availableWidth = max(0, sv.contentSize.width - rightMargin)
+                container.containerSize = NSSize(width: availableWidth, height: .greatestFiniteMagnitude)
+                // 窗口调整大小后强制重新布局以确保换行正确
+                tv.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: tv.string.count), actualCharacterRange: nil)
             }
         })
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .toolbarUndo)) { _ in performUndo() })

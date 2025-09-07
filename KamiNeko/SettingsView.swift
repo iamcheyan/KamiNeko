@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage("showLineNumbers") private var showLineNumbers: Bool = true
     @AppStorage("enableSyntaxHighlight") private var enableSyntaxHighlight: Bool = true
     @AppStorage("enableAutoSave") private var enableAutoSave: Bool = true
+    @AppStorage("showMiniMap") private var showMiniMap: Bool = true
     @AppStorage("editorFontName") private var editorFontName: String = "SFMono-Regular"
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @AppStorage("appLanguage") private var appLanguage: String = "system" // system, zh-Hans, en, ja
@@ -65,6 +66,15 @@ struct SettingsView: View {
                         Toggle("", isOn: $enableSyntaxHighlight)
                             .labelsHidden()
                             .onChange(of: enableSyntaxHighlight) {
+                                NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
+                            }
+                    }
+                    GridRow {
+                        Text(Localizer.t("editor.miniMap"))
+                            .frame(minWidth: 80, alignment: .trailing)
+                        Toggle("", isOn: $showMiniMap)
+                            .labelsHidden()
+                            .onChange(of: showMiniMap) {
                                 NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
                             }
                     }

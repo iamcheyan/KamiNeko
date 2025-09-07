@@ -39,6 +39,7 @@ enum Localizer {
         "editor.autoSave": ["zh-Hans": "自动保存", "en": "Auto Save", "ja": "自動保存"],
         "editor.showLineNumbers": ["zh-Hans": "显示行号", "en": "Line Numbers", "ja": "行番号"],
         "editor.syntaxHighlight": ["zh-Hans": "语法高亮", "en": "Syntax Highlight", "ja": "構文ハイライト"],
+        "editor.miniMap": ["zh-Hans": "显示文本地图", "en": "Show Mini Map", "ja": "テキストマップを表示"],
         "editor.fontName": ["zh-Hans": "字体名", "en": "Font Name", "ja": "フォント名"],
         "editor.fontSize": ["zh-Hans": "字号", "en": "Font Size", "ja": "文字サイズ"],
 
@@ -69,6 +70,12 @@ enum Localizer {
         "menu.showWritingTools": ["zh-Hans": "显示写作工具", "en": "Show Writing Tools", "ja": "ライティングツールを表示"],
         "menu.proofread": ["zh-Hans": "校对", "en": "Proofread", "ja": "校正"],
         "menu.rewrite": ["zh-Hans": "改写", "en": "Rewrite", "ja": "書き直し"],
+        // Find/Replace
+        "menu.find": ["zh-Hans": "查找…", "en": "Find…", "ja": "検索…"],
+        "menu.findNext": ["zh-Hans": "查找下一个", "en": "Find Next", "ja": "次を検索"],
+        "menu.findPrevious": ["zh-Hans": "查找上一个", "en": "Find Previous", "ja": "前を検索"],
+        "menu.replace": ["zh-Hans": "替换…", "en": "Replace…", "ja": "置換…"],
+        "menu.replaceAll": ["zh-Hans": "全部替换", "en": "Replace All", "ja": "すべて置換"],
 
         // App main menu (Application menu) templates
         // Use String(format:) with one %@ placeholder for app name
@@ -99,6 +106,8 @@ enum Localizer {
         "menu.newWindow": ["zh-Hans": "新建窗口", "en": "New Window", "ja": "新規ウインドウ"],
         "menu.closeWindow": ["zh-Hans": "关闭窗口", "en": "Close Window", "ja": "ウインドウを閉じる"],
         "menu.closeTabFile": ["zh-Hans": "关闭标签", "en": "Close Tab", "ja": "タブを閉じる"],
+        // View menu extras
+        "view.showFindBar": ["zh-Hans": "显示查找栏", "en": "Show Find Bar", "ja": "検索バーを表示"]
     ]
 }
 

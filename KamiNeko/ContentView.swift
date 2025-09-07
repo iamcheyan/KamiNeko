@@ -272,6 +272,7 @@ struct ContentView: View {
                         }
                     }
                     .onAppear(perform: setupShortcuts)
+                    .background(FindBarAccessor())
             } else {
                 ZStack {
                     Color(NSColor.textBackgroundColor)
@@ -588,6 +589,52 @@ private struct WindowAccessor: NSViewRepresentable {
         DispatchQueue.main.async { [weak nsView] in
             if let win = nsView?.window { onResolve(win) }
         }
+    }
+}
+
+// MARK: - Find bar controller (默认显示/菜单控制)
+private struct FindBarAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { [weak v] in
+            if let sv = v?.enclosingScrollView(), let tv = sv.documentView as? NSTextView {
+                tv.usesFindBar = true
+                applyShowState(scrollView: sv)
+                NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
+                    applyShowState(scrollView: sv)
+                }
+            }
+        }
+        return v
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            if let sv = nsView?.enclosingScrollView() { applyShowState(scrollView: sv) }
+        }
+    }
+
+    private func applyShowState(scrollView: NSScrollView) {
+        let show = UserDefaults.standard.bool(forKey: "showFindBar")
+        scrollView.findBarPosition = .belowContent
+        if show {
+            scrollView.toggleFindBar(self)
+            // 再次调用可确保在已展示时保持开启（toggleFindBar 无状态 API，这里用“若未打开则打开”的策略）
+            if scrollView.findBarView == nil { scrollView.toggleFindBar(self) }
+        } else {
+            if scrollView.findBarView != nil { scrollView.toggleFindBar(self) }
+        }
+    }
+}
+
+private extension NSView {
+    func enclosingScrollView() -> NSScrollView? {
+        var v: NSView? = self
+        while let current = v {
+            if let sv = current as? NSScrollView { return sv }
+            v = current.superview
+        }
+        return nil
     }
 }
 

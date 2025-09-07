@@ -69,6 +69,18 @@ struct EditorTextView: NSViewRepresentable {
         // Apply prefs and observe changes
         context.coordinator.enableSyntaxHighlight = UserDefaults.standard.bool(forKey: "enableSyntaxHighlight")
         context.coordinator.applyPreferences()
+        // Mini map
+        let miniMap = MiniMapView(textView: textView, scrollView: scrollView)
+        miniMap.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(miniMap)
+        NSLayoutConstraint.activate([
+            miniMap.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor, constant: -4),
+            miniMap.topAnchor.constraint(equalTo: scrollView.topAnchor, constant: 4),
+            miniMap.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: -4),
+            miniMap.widthAnchor.constraint(equalToConstant: 72)
+        ])
+        context.coordinator.miniMap = miniMap
+        miniMap.isHidden = !UserDefaults.standard.bool(forKey: "showMiniMap")
         NotificationCenter.default.addObserver(forName: .appPreferencesChanged, object: nil, queue: .main) { _ in
             context.coordinator.applyPreferences()
         }
@@ -114,6 +126,7 @@ struct EditorTextView: NSViewRepresentable {
         var document: DocumentModel
         weak var textView: NSTextView?
         weak var scrollView: NSScrollView?
+        weak var miniMap: MiniMapView?
         private var lastChange = Date()
         var enableSyntaxHighlight: Bool = true
 
@@ -130,6 +143,7 @@ struct EditorTextView: NSViewRepresentable {
             NotificationCenter.default.post(name: .documentEdited, object: nil)
             // 通知仅限当前文档，以避免多个窗口同步错误
             NotificationCenter.default.post(name: .documentContentChanged, object: document)
+            miniMap?.setNeedsDisplay(miniMap?.bounds ?? .zero)
         }
 
         func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
@@ -149,6 +163,7 @@ struct EditorTextView: NSViewRepresentable {
             scrollView?.hasVerticalRuler = showLines
             scrollView?.rulersVisible = showLines
             enableSyntaxHighlight = defaults.bool(forKey: "enableSyntaxHighlight")
+            miniMap?.isHidden = !defaults.bool(forKey: "showMiniMap")
         }
     }
 }
@@ -296,6 +311,24 @@ final class ZoomableTextView: NSTextView {
             }
             if let submenu = item.submenu { localizeStandardMenu(submenu) }
         }
+        // 追加查找/替换相关项（使用系统查找栏）
+        let findMenu = NSMenuItem(title: Localizer.t("menu.find"), action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "")
+        findMenu.tag = NSTextFinder.Action.showFindInterface.rawValue
+        let findNext = NSMenuItem(title: Localizer.t("menu.findNext"), action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "")
+        findNext.tag = NSTextFinder.Action.nextMatch.rawValue
+        let findPrev = NSMenuItem(title: Localizer.t("menu.findPrevious"), action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "")
+        findPrev.tag = NSTextFinder.Action.previousMatch.rawValue
+        let replaceMenu = NSMenuItem(title: Localizer.t("menu.replace"), action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "")
+        replaceMenu.tag = NSTextFinder.Action.showReplaceInterface.rawValue
+        let replaceAll = NSMenuItem(title: Localizer.t("menu.replaceAll"), action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "")
+        replaceAll.tag = NSTextFinder.Action.replaceAll.rawValue
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(findMenu)
+        menu.addItem(findNext)
+        menu.addItem(findPrev)
+        menu.addItem(replaceMenu)
+        menu.addItem(replaceAll)
     }
 
     // MARK: - Drag & Drop to open files in new tab (prevent path insertion)
@@ -407,6 +440,131 @@ final class LineNumberRulerView: NSRulerView {
             glyphIndex = NSMaxRange(lineRange)
             lineNumber += 1
         }
+    }
+}
+
+// MARK: - Mini map (文本地图)
+final class MiniMapView: NSView {
+    weak var textView: NSTextView?
+    weak var scrollView: NSScrollView?
+    private var observers: [NSObjectProtocol] = []
+
+    init(textView: NSTextView, scrollView: NSScrollView) {
+        self.textView = textView
+        self.scrollView = scrollView
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.masksToBounds = true
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.borderWidth = 1
+        startObserving()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit { stopObserving() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let tv = textView else { return }
+        let context = NSGraphicsContext.current?.cgContext
+        let isDark = (self.window?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        let bg = NSColor.secondaryLabelColor.withAlphaComponent(isDark ? 0.06 : 0.04)
+        context?.setFillColor(bg.cgColor)
+        context?.fill(bounds)
+
+        // 基于行做密度渲染
+        let ns = tv.string as NSString
+        let totalLen = ns.length
+        if totalLen == 0 { return }
+
+        var lineRanges: [NSRange] = []
+        ns.enumerateSubstrings(in: NSRange(location: 0, length: totalLen), options: [.byLines, .substringNotRequired]) { _, range, _, _ in
+            lineRanges.append(range)
+        }
+        let totalLines = max(1, lineRanges.count)
+        let unit = max(1.0, bounds.height / CGFloat(totalLines))
+
+        let activeColor = NSColor.labelColor.withAlphaComponent(isDark ? 0.35 : 0.25)
+        let passiveColor = NSColor.labelColor.withAlphaComponent(isDark ? 0.15 : 0.10)
+
+        for (idx, r) in lineRanges.enumerated() {
+            let y = CGFloat(idx) * unit
+            let h = ceil(unit)
+            let hasText = ns.substring(with: r).trimmingCharacters(in: .whitespaces).isEmpty == false
+            context?.setFillColor((hasText ? activeColor : passiveColor).cgColor)
+            context?.fill(CGRect(x: 2, y: y, width: bounds.width - 4, height: h))
+        }
+
+        // 可视区域高亮
+        if let lm = tv.layoutManager, let tc = tv.textContainer {
+            let visibleRect = scrollView?.contentView.bounds ?? .zero
+            let glyphRange = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
+            // 计算顶部与底部行索引
+            var topIndex = 0
+            var bottomIndex = totalLines - 1
+            var ln = 0
+            ns.enumerateSubstrings(in: NSRange(location: 0, length: totalLen), options: [.byLines, .substringNotRequired]) { _, range, _, stop in
+                if range.upperBound <= glyphRange.location { ln += 1; return }
+                if topIndex == 0 { topIndex = ln }
+                if range.location >= NSMaxRange(glyphRange) { bottomIndex = max(ln, topIndex); stop.pointee = true; return }
+                ln += 1
+            }
+            let y1 = CGFloat(topIndex) * unit
+            let y2 = CGFloat(min(bottomIndex + 1, totalLines)) * unit
+            let accent = NSColor.controlAccentColor.withAlphaComponent(isDark ? 0.35 : 0.25)
+            context?.setFillColor(accent.cgColor)
+            context?.fill(CGRect(x: 1, y: y1, width: bounds.width - 2, height: max(6, y2 - y1)))
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let tv = textView else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        scrollToMiniMapY(point.y, in: tv)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let tv = textView else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        scrollToMiniMapY(point.y, in: tv)
+    }
+
+    private func scrollToMiniMapY(_ y: CGFloat, in tv: NSTextView) {
+        let ns = tv.string as NSString
+        var lineStarts: [Int] = [0]
+        ns.enumerateSubstrings(in: NSRange(location: 0, length: ns.length), options: [.byLines, .substringNotRequired]) { _, range, _, _ in
+            lineStarts.append(range.upperBound)
+        }
+        let totalLines = max(1, lineStarts.count - 1)
+        let unit = max(1.0, bounds.height / CGFloat(totalLines))
+        let idx = min(max(Int(floor(y / unit)), 0), totalLines - 1)
+        let charIndex = lineStarts[idx]
+        tv.scrollRangeToVisible(NSRange(location: charIndex, length: 0))
+        needsDisplay = true
+    }
+
+    private func startObserving() {
+        guard observers.isEmpty else { return }
+        if let cv = scrollView?.contentView {
+            cv.postsBoundsChangedNotifications = true
+            let o = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: cv, queue: .main) { [weak self] _ in
+                self?.needsDisplay = true
+            }
+            observers.append(o)
+        }
+        if let tv = textView {
+            let o1 = NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: tv, queue: .main) { [weak self] _ in
+                self?.needsDisplay = true
+            }
+            observers.append(o1)
+        }
+    }
+
+    private func stopObserving() {
+        for o in observers { NotificationCenter.default.removeObserver(o) }
+        observers.removeAll()
     }
 }
 

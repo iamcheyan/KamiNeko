@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 默认开启查找栏
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "showFindBar") == nil { defaults.set(true, forKey: "showFindBar") }
         // Prefer using native NSWindow Tab Bar
         NSWindow.allowsAutomaticWindowTabbing = true
         NSApp.windows.forEach { window in
@@ -110,6 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let submenu = item.submenu {
                 localizeWindowMenu(submenu)
                 localizeCommonMenuItemsRecursively(submenu)
+                // 增加“显示查找栏”开关
+                if item.title == Localizer.t("menu.view") {
+                    ensureViewMenuExtras(submenu)
+                }
             }
         }
         // 直接设置系统引用的菜单标题以确保刷新
@@ -125,6 +132,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let i = idx + 1
                 if i < mainMenu.items.count {
                     mainMenu.items[i].title = title
+                }
+            }
+        }
+    }
+
+    // 在“显示”菜单中添加/更新查找栏开关
+    private func ensureViewMenuExtras(_ menu: NSMenu) {
+        let selector = #selector(toggleFindBarFromMenu(_:))
+        let existed = menu.items.first { $0.action == selector }
+        let title = Localizer.t("view.showFindBar")
+        let item: NSMenuItem = existed ?? {
+            let it = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+            it.target = self
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(it)
+            return it
+        }()
+        item.title = title
+        item.state = UserDefaults.standard.bool(forKey: "showFindBar") ? .on : .off
+    }
+
+    @objc private func toggleFindBarFromMenu(_ sender: Any?) {
+        let defaults = UserDefaults.standard
+        let newValue = !defaults.bool(forKey: "showFindBar")
+        defaults.set(newValue, forKey: "showFindBar")
+        NotificationCenter.default.post(name: .appPreferencesChanged, object: nil)
+        // 更新菜单勾选状态
+        if let mainMenu = NSApp.mainMenu {
+            for item in mainMenu.items {
+                if let submenu = item.submenu, item.title == Localizer.t("menu.view") {
+                    if let i = submenu.items.first(where: { $0.action == #selector(toggleFindBarFromMenu(_:)) }) {
+                        i.state = newValue ? .on : .off
+                    }
                 }
             }
         }

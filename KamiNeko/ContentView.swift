@@ -617,13 +617,11 @@ private struct FindBarAccessor: NSViewRepresentable {
     private func applyShowState(scrollView: NSScrollView) {
         let show = UserDefaults.standard.bool(forKey: "showFindBar")
         scrollView.findBarPosition = .belowContent
-        if show {
-            scrollView.toggleFindBar(self)
-            // 再次调用可确保在已展示时保持开启（toggleFindBar 无状态 API，这里用“若未打开则打开”的策略）
-            if scrollView.findBarView == nil { scrollView.toggleFindBar(self) }
-        } else {
-            if scrollView.findBarView != nil { scrollView.toggleFindBar(self) }
-        }
+        guard let tv = scrollView.documentView as? NSTextView else { return }
+        tv.usesFindBar = true
+        let item = NSMenuItem()
+        item.tag = (show ? NSTextFinder.Action.showFindInterface : NSTextFinder.Action.hideFindInterface).rawValue
+        tv.performTextFinderAction(item)
     }
 }
 

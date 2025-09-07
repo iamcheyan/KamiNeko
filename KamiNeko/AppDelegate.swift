@@ -20,12 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationWillTerminate(_ notification: Notification) {
         SessionManager.shared.isTerminating = true
+        // 退出前清理空文件
+        WorkingDirectoryManager.shared.cleanEmptyFilesInDirectory()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 默认开启查找栏
         let defaults = UserDefaults.standard
         if defaults.object(forKey: "showFindBar") == nil { defaults.set(true, forKey: "showFindBar") }
+        // 启动时清理工作目录中的空文件
+        WorkingDirectoryManager.shared.cleanEmptyFilesInDirectory()
         // Prefer using native NSWindow Tab Bar
         NSWindow.allowsAutomaticWindowTabbing = true
         NSApp.windows.forEach { window in

@@ -150,6 +150,36 @@ final class WorkingDirectoryManager {
         }
     }
 
+    // 判断 KamiNeko 的本地 JSON 文档是否为空内容
+    func isEmptyKamiNekoDocumentJSON(_ url: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "json" else { return false }
+        return withDirectoryAccess {
+            guard let data = try? Data(contentsOf: url) else { return false }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            let type = (json["type"] as? String) ?? "local_document"
+            if type == "local_document" || type == DocumentType.localDocument.rawValue {
+                let content = (json["content"] as? String) ?? ""
+                let untitled = (json["isUntitled"] as? Bool) ?? false
+                return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && untitled
+            }
+            return false
+        }
+    }
+
+    // 统一判断是否应视为“空文件”（需删除）
+    func shouldTreatAsEmpty(_ url: URL) -> Bool {
+        return isWhitespaceOnly(url) || isEmptyKamiNekoDocumentJSON(url)
+    }
+
+    // 启动或退出时批量清理空文件
+    func cleanEmptyFilesInDirectory() {
+        for url in listFiles() {
+            if shouldTreatAsEmpty(url) {
+                try? deleteFile(at: url)
+            }
+        }
+    }
+
     func deleteFile(at url: URL) throws {
         try withDirectoryAccess {
             if fileManager.fileExists(atPath: url.path) {

@@ -64,24 +64,12 @@ struct ContentView: View {
                 if isAppStartup {
                     // 优先使用工作目录模式：按目录中文件构建标签；若未设置目录，则提示选择
                     if let _ = WorkingDirectoryManager.shared.directoryURL ?? WorkingDirectoryManager.shared.promptUserToChooseDirectory() {
+                        // 列表前先清理一次空文件
+                        WorkingDirectoryManager.shared.cleanEmptyFilesInDirectory()
                         var files = WorkingDirectoryManager.shared.listFiles()
-                        // 启动时先清理空白文件（仅空白字符），并从加载列表中过滤掉
-                        files = files.filter { url in
-                            if WorkingDirectoryManager.shared.isWhitespaceOnly(url) {
-                                try? WorkingDirectoryManager.shared.deleteFile(at: url)
-                                return false
-                            }
-                            return true
-                        }
                         if files.isEmpty {
-                            // 目录为空：自动创建一个新文件与标签
-                            if let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
-                                let doc = makeDoc(for: newURL)
-                                store.documents = [doc]
-                                store.selectedDocumentID = doc.id
-                            } else {
-                                store.newUntitled()
-                            }
+                            // 目录为空：不创建空文件，直接打开未命名文档（内存态，不落盘）
+                            store.newUntitled()
                         } else {
                             // 目录已有文件：首个在当前标签，其余扇出
                             let firstURL = files[0]
@@ -118,13 +106,8 @@ struct ContentView: View {
                         store.documents = [doc]
                         store.selectedDocumentID = doc.id
                     } else {
-                        if WorkingDirectoryManager.shared.directoryURL != nil, let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile() {
-                            let doc = makeDoc(for: newURL)
-                            store.documents = [doc]
-                            store.selectedDocumentID = doc.id
-                        } else {
-                            store.newUntitled()
-                        }
+                        // 新标签默认不创建磁盘空文件，使用未命名文档
+                        store.newUntitled()
                     }
                 }
             } else if store.selectedDocument() == nil {

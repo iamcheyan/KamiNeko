@@ -234,6 +234,19 @@ final class SessionManager {
         WorkingDirectoryManager.shared.withDirectoryAccess {
             for s in DocumentStore.allStores.allObjects {
                 for d in s.documents {
+                    // 若为本地文档且尚未落盘，但内容非空，则在工作目录创建一个 JSON 并保存
+                    if d.fileURL == nil && d.type == .localDocument {
+                        if d.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                            if let newURL = try? WorkingDirectoryManager.shared.createNewEmptyFile(preferredBaseName: d.title) {
+                                d.fileURL = newURL
+                                d.isDirty = true
+                            }
+                        } else {
+                            // 空内容，无需保存文件
+                            continue
+                        }
+                    }
+
                     if let url = d.fileURL, d.isDirty {
                         // JSON 包装文件：写包装，同时如果是 opened_document 也写回原文件路径
                         if url.pathExtension.lowercased() == "json" {

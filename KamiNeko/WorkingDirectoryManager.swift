@@ -159,8 +159,8 @@ final class WorkingDirectoryManager {
             let type = (json["type"] as? String) ?? "local_document"
             if type == "local_document" || type == DocumentType.localDocument.rawValue {
                 let content = (json["content"] as? String) ?? ""
-                let untitled = (json["isUntitled"] as? Bool) ?? false
-                return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && untitled
+                // 仅以 content 为空作为判断条件（忽略 isUntitled）
+                return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
             return false
         }
